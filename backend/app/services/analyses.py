@@ -10,9 +10,7 @@ from app.models.analysis import Analysis
 from app.models.configuration import Configuration
 
 
-async def get_analysis(
-    session: AsyncSession, analysis_id: UUID, user_id: UUID
-) -> Analysis | None:
+async def get_analysis(session: AsyncSession, analysis_id: UUID, user_id: UUID) -> Analysis | None:
     result = await session.execute(
         select(Analysis)
         .join(Configuration, Analysis.configuration_id == Configuration.id)

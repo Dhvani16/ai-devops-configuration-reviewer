@@ -5,7 +5,9 @@ import re
 from app.analyzers.interface import ConfigurationAnalyzer
 from app.schemas.finding import ConfigurationType, Finding, FindingCategory, FindingSeverity
 
-SECRET_PATTERN = re.compile(r"\b(password|secret|token|api[_-]?key|access[_-]?key)\b", re.IGNORECASE)
+SECRET_PATTERN = re.compile(
+    r"\b(password|secret|token|api[_-]?key|access[_-]?key)\b", re.IGNORECASE
+)
 
 
 class DockerfileAnalyzer(ConfigurationAnalyzer):
@@ -14,7 +16,9 @@ class DockerfileAnalyzer(ConfigurationAnalyzer):
     def analyze(self, content: str) -> list[Finding]:
         findings: list[Finding] = []
         lines = content.splitlines()
-        instructions = [(index, line.strip()) for index, line in enumerate(lines, 1) if line.strip()]
+        instructions = [
+            (index, line.strip()) for index, line in enumerate(lines, 1) if line.strip()
+        ]
 
         for line_number, line in instructions:
             from_match = re.match(r"FROM\s+(?:--platform=\S+\s+)?([^\s]+)", line, re.IGNORECASE)
@@ -47,7 +51,10 @@ class DockerfileAnalyzer(ConfigurationAnalyzer):
                         line,
                     )
                 )
-            if re.search(r"apt-get\s+install", line, re.IGNORECASE) and "--no-install-recommends" not in line:
+            if (
+                re.search(r"apt-get\s+install", line, re.IGNORECASE)
+                and "--no-install-recommends" not in line
+            ):
                 findings.append(
                     _finding(
                         "dockerfile-apt-recommends",

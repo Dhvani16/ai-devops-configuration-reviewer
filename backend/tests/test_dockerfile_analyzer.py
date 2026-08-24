@@ -15,7 +15,10 @@ from app.analyzers.dockerfile import DockerfileAnalyzer
             "FROM ubuntu:24.04\nRUN apt-get update && apt-get install curl\nUSER app",
             "dockerfile-apt-recommends",
         ),
-        ("FROM python:3.12\n" + "\n".join("RUN echo test" for _ in range(11)) + "\nUSER app", "dockerfile-excessive-layers"),
+        (
+            "FROM python:3.12\n" + "\n".join("RUN echo test" for _ in range(11)) + "\nUSER app",
+            "dockerfile-excessive-layers",
+        ),
     ],
 )
 def test_dockerfile_rules(content: str, rule_id: str) -> None:

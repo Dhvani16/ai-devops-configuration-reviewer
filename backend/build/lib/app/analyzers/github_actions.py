@@ -20,7 +20,14 @@ class GitHubActionsAnalyzer(ConfigurationAnalyzer):
         workflow = _load_workflow(content)
         findings: list[Finding] = []
         if "pull_request_target" in _triggers(workflow):
-            findings.append(_finding("actions-pull-request-target", FindingSeverity.HIGH, "pull_request_target", content))
+            findings.append(
+                _finding(
+                    "actions-pull-request-target",
+                    FindingSeverity.HIGH,
+                    "pull_request_target",
+                    content,
+                )
+            )
         findings.extend(_permission_findings(workflow.get("permissions"), content))
 
         jobs = workflow.get("jobs")
@@ -34,13 +41,25 @@ class GitHubActionsAnalyzer(ConfigurationAnalyzer):
                 if not isinstance(step, dict):
                     continue
                 uses = step.get("uses")
-                if isinstance(uses, str) and not uses.startswith(("./", "docker://")) and not _is_pinned(uses):
-                    findings.append(_finding("actions-unpinned-action", FindingSeverity.MEDIUM, uses, content))
+                if (
+                    isinstance(uses, str)
+                    and not uses.startswith(("./", "docker://"))
+                    and not _is_pinned(uses)
+                ):
+                    findings.append(
+                        _finding("actions-unpinned-action", FindingSeverity.MEDIUM, uses, content)
+                    )
                 run = step.get("run")
                 if isinstance(run, str) and DANGEROUS_EXPRESSION.search(run):
-                    findings.append(_finding("actions-untrusted-shell-input", FindingSeverity.HIGH, run, content))
+                    findings.append(
+                        _finding(
+                            "actions-untrusted-shell-input", FindingSeverity.HIGH, run, content
+                        )
+                    )
                 if isinstance(run, str) and re.search(r"echo.+secrets\.", run, re.IGNORECASE):
-                    findings.append(_finding("actions-secret-in-logs", FindingSeverity.CRITICAL, run, content))
+                    findings.append(
+                        _finding("actions-secret-in-logs", FindingSeverity.CRITICAL, run, content)
+                    )
         return findings
 
 
@@ -67,7 +86,14 @@ def _triggers(workflow: dict[str, Any]) -> list[str]:
 
 def _permission_findings(permissions: Any, content: str) -> list[Finding]:
     if permissions == "write-all":
-        return [_finding("actions-write-all-permissions", FindingSeverity.HIGH, "permissions: write-all", content)]
+        return [
+            _finding(
+                "actions-write-all-permissions",
+                FindingSeverity.HIGH,
+                "permissions: write-all",
+                content,
+            )
+        ]
     if isinstance(permissions, dict):
         return [
             _finding("actions-write-permission", FindingSeverity.HIGH, f"{scope}: write", content)

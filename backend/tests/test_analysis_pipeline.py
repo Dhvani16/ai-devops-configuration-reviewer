@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.ai.mock_provider import MockAIProvider
 from app.ai.provider import AIProviderError
 from app.ai.schemas import AIAnalysisFinding, AIAnalysisResponse
+from app.analyzers.interface import InvalidConfigurationError
 from app.core.config import get_settings
 from app.db.base import Base
 from app.models.configuration import Configuration
@@ -136,11 +137,9 @@ def test_pipeline_raises_on_invalid_config() -> None:
 
             mock_provider = MockAIProvider()
             settings = get_settings()
-            await run_analysis_pipeline(
-                config, session, settings, ai_provider=mock_provider
-            )
+            await run_analysis_pipeline(config, session, settings, ai_provider=mock_provider)
 
-    with pytest.raises(Exception):  # InvalidConfigurationError
+    with pytest.raises(InvalidConfigurationError):
         asyncio.run(run())
 
     asyncio.run(engine.dispose())

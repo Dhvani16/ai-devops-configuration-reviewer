@@ -32,14 +32,16 @@ def client() -> TestClient:
 
 def test_register_login_and_current_user(client: TestClient) -> None:
     registration = client.post(
-        "/api/v1/auth/register", json={"email": "student@example.com", "password": "secure-password-123"}
+        "/api/v1/auth/register",
+        json={"email": "student@example.com", "password": "secure-password-123"},
     )
     assert registration.status_code == 201
     assert registration.json()["email"] == "student@example.com"
     assert "hashed_password" not in registration.json()
 
     login = client.post(
-        "/api/v1/auth/login", json={"email": "student@example.com", "password": "secure-password-123"}
+        "/api/v1/auth/login",
+        json={"email": "student@example.com", "password": "secure-password-123"},
     )
     assert login.status_code == 200
     token = login.json()["access_token"]
@@ -54,5 +56,10 @@ def test_auth_rejects_duplicate_credentials_and_missing_token(client: TestClient
     payload = {"email": "student@example.com", "password": "secure-password-123"}
     assert client.post("/api/v1/auth/register", json=payload).status_code == 201
     assert client.post("/api/v1/auth/register", json=payload).status_code == 409
-    assert client.post("/api/v1/auth/login", json={**payload, "password": "wrong-password-123"}).status_code == 401
+    assert (
+        client.post(
+            "/api/v1/auth/login", json={**payload, "password": "wrong-password-123"}
+        ).status_code
+        == 401
+    )
     assert client.get("/api/v1/auth/me").status_code == 401

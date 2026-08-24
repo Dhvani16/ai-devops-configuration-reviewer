@@ -1,7 +1,7 @@
 """Analysis pipeline: static analysis → AI analysis → risk scoring → DB persistence."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -11,7 +11,9 @@ from sqlalchemy.orm import selectinload
 from app.ai.provider import AIProvider, AIProviderError
 from app.ai.schemas import AIAnalysisRequest
 from app.analyzers.factory import get_analyzer
-from app.analyzers.interface import InvalidConfigurationError  # noqa: F401 — re-exported for callers
+from app.analyzers.interface import (
+    InvalidConfigurationError,  # noqa: F401 — re-exported for callers
+)
 from app.core.config import Settings
 from app.models.analysis import Analysis, FindingRecord
 from app.models.configuration import Configuration
@@ -112,15 +114,13 @@ async def run_analysis_pipeline(
 
     analysis.status = "completed"
     analysis.overall_score = overall_score
-    analysis.completed_at = datetime.now(timezone.utc)
+    analysis.completed_at = datetime.now(UTC)
     analysis.error_message = error_message
 
     await session.commit()
 
     result = await session.execute(
-        select(Analysis)
-        .where(Analysis.id == analysis.id)
-        .options(selectinload(Analysis.findings))
+        select(Analysis).where(Analysis.id == analysis.id).options(selectinload(Analysis.findings))
     )
     loaded = result.scalar_one()
 

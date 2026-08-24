@@ -11,11 +11,23 @@ def workflow(job: str, trigger: str = "push", permissions: str = "") -> str:
 @pytest.mark.parametrize(
     ("content", "rule_id"),
     [
-        (workflow("      - run: echo safe", trigger="pull_request_target"), "actions-pull-request-target"),
+        (
+            workflow("      - run: echo safe", trigger="pull_request_target"),
+            "actions-pull-request-target",
+        ),
         (workflow("      - uses: third-party/action@v1"), "actions-unpinned-action"),
-        (workflow("      - run: echo safe", permissions="permissions: write-all\n"), "actions-write-all-permissions"),
-        (workflow("      - run: echo safe", permissions="permissions:\n  contents: write\n"), "actions-write-permission"),
-        (workflow("      - run: echo '${{ github.event.pull_request.title }}'"), "actions-untrusted-shell-input"),
+        (
+            workflow("      - run: echo safe", permissions="permissions: write-all\n"),
+            "actions-write-all-permissions",
+        ),
+        (
+            workflow("      - run: echo safe", permissions="permissions:\n  contents: write\n"),
+            "actions-write-permission",
+        ),
+        (
+            workflow("      - run: echo '${{ github.event.pull_request.title }}'"),
+            "actions-untrusted-shell-input",
+        ),
         (workflow("      - run: echo ${{ secrets.DEPLOY_TOKEN }}"), "actions-secret-in-logs"),
     ],
 )

@@ -16,14 +16,20 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(payload: RegisterRequest, session: AsyncSession = Depends(get_db_session)) -> User:
+async def register(
+    payload: RegisterRequest, session: AsyncSession = Depends(get_db_session)
+) -> User:
     if await get_user_by_email(session, str(payload.email)):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email is already registered")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Email is already registered"
+        )
     try:
         return await create_user(session, str(payload.email), payload.password)
     except IntegrityError:
         await session.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email is already registered") from None
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Email is already registered"
+        ) from None
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -34,7 +40,9 @@ async def login(
 ) -> TokenResponse:
     user = await authenticate_user(session, str(payload.email), payload.password)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
+        )
     return TokenResponse(access_token=create_access_token(user.id, settings))
 
 

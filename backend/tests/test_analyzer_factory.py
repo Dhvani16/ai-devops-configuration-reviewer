@@ -15,5 +15,7 @@ from app.schemas.finding import ConfigurationType
         (ConfigurationType.GITHUB_ACTIONS, GitHubActionsAnalyzer),
     ],
 )
-def test_factory_returns_supported_analyzer(configuration_type: ConfigurationType, analyzer_class: type) -> None:
+def test_factory_returns_supported_analyzer(
+    configuration_type: ConfigurationType, analyzer_class: type
+) -> None:
     assert isinstance(get_analyzer(configuration_type), analyzer_class)

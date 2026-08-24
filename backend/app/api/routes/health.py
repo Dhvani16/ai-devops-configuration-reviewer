@@ -24,5 +24,7 @@ async def readiness(session: AsyncSession = Depends(get_db_session)) -> dict[str
         await session.execute(text("SELECT 1"))
     except SQLAlchemyError:
         logger.exception("Readiness check failed")
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable") from None
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable"
+        ) from None
     return {"status": "ready"}

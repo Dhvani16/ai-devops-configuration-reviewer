@@ -16,5 +16,7 @@ class AIAnalysisService:
         try:
             return await self._provider.analyze(request)
         except AIProviderError:
-            logger.exception("AI analysis failed for configuration type %s", request.configuration_type.value)
+            logger.exception(
+                "AI analysis failed for configuration type %s", request.configuration_type.value
+            )
             raise

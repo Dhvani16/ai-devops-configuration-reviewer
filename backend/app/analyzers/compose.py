@@ -19,7 +19,9 @@ class ComposeAnalyzer(ConfigurationAnalyzer):
         document = _load_compose(content)
         services = document.get("services")
         if not isinstance(services, dict):
-            raise InvalidConfigurationError("Docker Compose configuration must contain a services mapping")
+            raise InvalidConfigurationError(
+                "Docker Compose configuration must contain a services mapping"
+            )
 
         findings: list[Finding] = []
         for service_name, service in services.items():
@@ -31,17 +33,56 @@ class ComposeAnalyzer(ConfigurationAnalyzer):
     def _analyze_service(self, name: str, service: dict[str, Any], content: str) -> list[Finding]:
         findings: list[Finding] = []
         if service.get("privileged") is True:
-            findings.append(_finding("compose-privileged", FindingSeverity.CRITICAL, "Privileged container", "privileged"))
+            findings.append(
+                _finding(
+                    "compose-privileged",
+                    FindingSeverity.CRITICAL,
+                    "Privileged container",
+                    "privileged",
+                )
+            )
         if service.get("network_mode") == "host":
-            findings.append(_finding("compose-host-network", FindingSeverity.HIGH, "Host network enabled", "network_mode"))
+            findings.append(
+                _finding(
+                    "compose-host-network",
+                    FindingSeverity.HIGH,
+                    "Host network enabled",
+                    "network_mode",
+                )
+            )
         if _contains_docker_socket(service.get("volumes")):
-            findings.append(_finding("compose-docker-socket", FindingSeverity.CRITICAL, "Docker socket mounted", "docker.sock"))
+            findings.append(
+                _finding(
+                    "compose-docker-socket",
+                    FindingSeverity.CRITICAL,
+                    "Docker socket mounted",
+                    "docker.sock",
+                )
+            )
         if "restart" not in service:
-            findings.append(_finding("compose-missing-restart", FindingSeverity.MEDIUM, "No restart policy", name))
+            findings.append(
+                _finding(
+                    "compose-missing-restart", FindingSeverity.MEDIUM, "No restart policy", name
+                )
+            )
         if _has_all_capabilities(service.get("cap_add")):
-            findings.append(_finding("compose-all-capabilities", FindingSeverity.HIGH, "All Linux capabilities added", "cap_add"))
+            findings.append(
+                _finding(
+                    "compose-all-capabilities",
+                    FindingSeverity.HIGH,
+                    "All Linux capabilities added",
+                    "cap_add",
+                )
+            )
         if str(service.get("user", "")).strip().lower() in {"root", "0", "0:0"}:
-            findings.append(_finding("compose-root-user", FindingSeverity.HIGH, "Service explicitly runs as root", "user"))
+            findings.append(
+                _finding(
+                    "compose-root-user",
+                    FindingSeverity.HIGH,
+                    "Service explicitly runs as root",
+                    "user",
+                )
+            )
         for key, value in _environment_values(service.get("environment")):
             if SECRET_PATTERN.search(key) and _is_hard_coded(value):
                 findings.append(
@@ -53,7 +94,9 @@ class ComposeAnalyzer(ConfigurationAnalyzer):
                     )
                 )
         return [
-            finding.model_copy(update={"line_number": find_line_number(content, re.escape(finding.evidence))})
+            finding.model_copy(
+                update={"line_number": find_line_number(content, re.escape(finding.evidence))}
+            )
             for finding in findings
         ]
 
@@ -69,18 +112,26 @@ def _load_compose(content: str) -> dict[str, Any]:
 
 
 def _contains_docker_socket(volumes: Any) -> bool:
-    return isinstance(volumes, list) and any("/var/run/docker.sock" in str(volume) for volume in volumes)
+    return isinstance(volumes, list) and any(
+        "/var/run/docker.sock" in str(volume) for volume in volumes
+    )
 
 
 def _has_all_capabilities(capabilities: Any) -> bool:
-    return isinstance(capabilities, list) and any(str(item).upper() == "ALL" for item in capabilities)
+    return isinstance(capabilities, list) and any(
+        str(item).upper() == "ALL" for item in capabilities
+    )
 
 
 def _environment_values(environment: Any) -> list[tuple[str, str]]:
     if isinstance(environment, dict):
         return [(str(key), str(value)) for key, value in environment.items()]
     if isinstance(environment, list):
-        return [tuple(item.split("=", 1)) for item in environment if isinstance(item, str) and "=" in item]
+        return [
+            tuple(item.split("=", 1))
+            for item in environment
+            if isinstance(item, str) and "=" in item
+        ]
     return []
 
 
@@ -107,7 +158,11 @@ def _finding(rule_id: str, severity: FindingSeverity, title: str, evidence: str)
         "compose-root-user": "Run the service as a dedicated non-root user.",
         "compose-hard-coded-secret": "Use environment injection or a secret manager rather than a literal value.",
     }
-    category = FindingCategory.RELIABILITY if rule_id == "compose-missing-restart" else FindingCategory.SECURITY
+    category = (
+        FindingCategory.RELIABILITY
+        if rule_id == "compose-missing-restart"
+        else FindingCategory.SECURITY
+    )
     return Finding(
         rule_id=rule_id,
         category=category,

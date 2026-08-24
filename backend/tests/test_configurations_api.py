@@ -159,8 +159,12 @@ def test_configuration_not_accessible_by_other_user(client: TestClient) -> None:
     )
     config_id = created.json()["id"]
 
-    assert client.get(f"/api/v1/configurations/{config_id}", headers=other_headers).status_code == 404
     assert (
-        client.post(f"/api/v1/configurations/{config_id}/analyze", headers=other_headers).status_code
+        client.get(f"/api/v1/configurations/{config_id}", headers=other_headers).status_code == 404
+    )
+    assert (
+        client.post(
+            f"/api/v1/configurations/{config_id}/analyze", headers=other_headers
+        ).status_code
         == 404
     )

@@ -12,7 +12,11 @@ from app.core.config import Settings, get_settings
 from app.db.session import get_db_session
 from app.models.user import User
 from app.schemas.analysis import AnalysisResponse
-from app.schemas.configuration import ConfigurationCreate, ConfigurationDetailResponse, ConfigurationResponse
+from app.schemas.configuration import (
+    ConfigurationCreate,
+    ConfigurationDetailResponse,
+    ConfigurationResponse,
+)
 from app.services.analysis_pipeline import run_analysis_pipeline
 from app.services.configurations import (
     create_configuration,

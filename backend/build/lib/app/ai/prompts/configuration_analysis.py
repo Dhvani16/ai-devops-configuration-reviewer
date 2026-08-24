@@ -12,7 +12,9 @@ Reference relevant line numbers when possible. The response must conform to the 
 
 def build_analysis_input(request: AIAnalysisRequest) -> str:
     """Build compact dynamic context after the stable system prompt."""
-    deterministic_findings = [finding.model_dump(mode="json") for finding in request.deterministic_findings]
+    deterministic_findings = [
+        finding.model_dump(mode="json") for finding in request.deterministic_findings
+    ]
     return (
         f"Configuration type: {request.configuration_type.value}\n\n"
         "Deterministic findings:\n"

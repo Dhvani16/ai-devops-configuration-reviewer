@@ -46,9 +46,7 @@ async def list_configurations(session: AsyncSession, user_id: UUID) -> list[Conf
     return list(result.scalars().all())
 
 
-async def delete_configuration(
-    session: AsyncSession, config_id: UUID, user_id: UUID
-) -> bool:
+async def delete_configuration(session: AsyncSession, config_id: UUID, user_id: UUID) -> bool:
     config = await get_configuration(session, config_id, user_id)
     if config is None:
         return False

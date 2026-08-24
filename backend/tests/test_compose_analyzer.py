@@ -9,11 +9,17 @@ from app.analyzers.interface import InvalidConfigurationError
     [
         ("privileged: true\n    restart: always", "compose-privileged"),
         ("network_mode: host\n    restart: always", "compose-host-network"),
-        ("volumes:\n      - /var/run/docker.sock:/var/run/docker.sock\n    restart: always", "compose-docker-socket"),
+        (
+            "volumes:\n      - /var/run/docker.sock:/var/run/docker.sock\n    restart: always",
+            "compose-docker-socket",
+        ),
         ("image: nginx", "compose-missing-restart"),
         ("cap_add:\n      - ALL\n    restart: always", "compose-all-capabilities"),
         ("user: '0:0'\n    restart: always", "compose-root-user"),
-        ("environment:\n      DATABASE_PASSWORD: literal\n    restart: always", "compose-hard-coded-secret"),
+        (
+            "environment:\n      DATABASE_PASSWORD: literal\n    restart: always",
+            "compose-hard-coded-secret",
+        ),
     ],
 )
 def test_compose_rules(service: str, rule_id: str) -> None:

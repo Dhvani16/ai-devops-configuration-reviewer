@@ -43,7 +43,9 @@ def valid_response() -> AIAnalysisResponse:
 
 
 def request() -> AIAnalysisRequest:
-    return AIAnalysisRequest(configuration_type=ConfigurationType.GITHUB_ACTIONS, content="on: push")
+    return AIAnalysisRequest(
+        configuration_type=ConfigurationType.GITHUB_ACTIONS, content="on: push"
+    )
 
 
 def test_parse_ai_response_recovers_fenced_json() -> None:
@@ -101,7 +103,9 @@ def test_ollama_provider_validates_structured_output() -> None:
     async def run() -> AIAnalysisResponse:
         client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
         try:
-            return await OllamaProvider(settings(ai_provider="ollama"), client=client).analyze(request())
+            return await OllamaProvider(settings(ai_provider="ollama"), client=client).analyze(
+                request()
+            )
         finally:
             await client.aclose()
 

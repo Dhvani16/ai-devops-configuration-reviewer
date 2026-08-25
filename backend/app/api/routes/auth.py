@@ -1,11 +1,12 @@
 """Email/password authentication routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.config import Settings, get_settings
+from app.core.limiter import limiter
 from app.core.security import create_access_token
 from app.db.session import get_db_session
 from app.models.user import User
@@ -16,8 +17,11 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
 async def register(
-    payload: RegisterRequest, session: AsyncSession = Depends(get_db_session)
+    request: Request,
+    payload: RegisterRequest,
+    session: AsyncSession = Depends(get_db_session),
 ) -> User:
     if await get_user_by_email(session, str(payload.email)):
         raise HTTPException(
@@ -33,7 +37,9 @@ async def register(
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit("30/minute")
 async def login(
+    request: Request,
     payload: LoginRequest,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_settings),

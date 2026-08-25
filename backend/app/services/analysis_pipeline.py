@@ -15,6 +15,7 @@ from app.analyzers.interface import (
     InvalidConfigurationError,  # noqa: F401 — re-exported for callers
 )
 from app.core.config import Settings
+from app.core.metrics import AI_FAILURES_TOTAL, ANALYSES_TOTAL
 from app.models.analysis import Analysis, FindingRecord
 from app.models.configuration import Configuration
 from app.schemas.finding import ConfigurationType
@@ -71,6 +72,7 @@ async def run_analysis_pipeline(
             exc,
         )
         error_message = f"AI analysis unavailable: {exc}"
+        AI_FAILURES_TOTAL.inc()
 
     overall_score = calculate_score(
         [f.severity.value for f in static_findings] + [f.severity.value for f in ai_findings]
@@ -131,4 +133,5 @@ async def run_analysis_pipeline(
         len(static_findings),
         len(ai_findings),
     )
+    ANALYSES_TOTAL.inc()
     return loaded

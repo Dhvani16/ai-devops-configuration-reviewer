@@ -94,7 +94,7 @@ Store a configuration for later analysis.
 }
 ```
 
-`configuration_type` must be one of: `dockerfile`, `docker_compose`, `github_actions`.
+`configuration_type` must be one of: `dockerfile`, `docker_compose`, `github_actions`, `kubernetes`, `terraform`.
 
 **Response** `201 Created`
 ```json
@@ -138,18 +138,18 @@ Delete a configuration and all its analyses (cascade).
 
 ### `POST /api/v1/configurations/{id}/analyze`
 
-Run the full analysis pipeline: static rules → AI analysis → risk scoring → persist.
+Start the analysis pipeline. Static analysis runs synchronously; AI analysis runs in a background task.
 
-**Response** `200 OK`
+**Response** `202 Accepted`
 ```json
 {
   "id": "...",
   "configuration_id": "...",
-  "status": "completed",
-  "overall_score": 72.0,
+  "status": "pending",
+  "overall_score": null,
   "error_message": null,
   "created_at": "...",
-  "completed_at": "...",
+  "completed_at": null,
   "findings": [
     {
       "id": "...",
@@ -170,11 +170,13 @@ Run the full analysis pipeline: static rules → AI analysis → risk scoring �
 }
 ```
 
+`status` is `"pending"` immediately. Poll `GET /api/v1/analyses/{id}` until `status` is `"completed"`.
+
 `source` is either `"deterministic"` (static analyzer) or `"ai"` (LLM). `confidence` is a float 0–1 only for AI findings. `error_message` is populated when AI analysis failed but static findings are still returned.
 
 **Errors**
 - `404 Not Found` — configuration not found
-- `422 Unprocessable Entity` — configuration content cannot be parsed (e.g. invalid YAML)
+- `422 Unprocessable Entity` — configuration content cannot be parsed (e.g. invalid YAML or empty HCL)
 
 ---
 
@@ -191,6 +193,27 @@ List all analyses for the current user (across all configurations), most recent 
 ### `GET /api/v1/analyses/{id}`
 
 Get a single analysis with all findings.
+
+`status` values: `"pending"` | `"running"` | `"completed"`.
+
+**Errors**
+- `404 Not Found` — analysis not found or belongs to another user
+
+---
+
+### `GET /api/v1/analyses/{id}/sarif`
+
+Export findings as a [SARIF 2.1](https://sarifweb.azurewebsites.net/) document, compatible with GitHub Code Scanning.
+
+**Response** `200 OK`
+- `Content-Type: application/json`
+- `Content-Disposition: attachment; filename="analysis-{id}.sarif"`
+
+The SARIF document includes:
+- One `rule` entry per unique `rule_id` (deduped)
+- Severity mapped to SARIF level: `critical`/`high` → `"error"`, `medium` → `"warning"`, `low` → `"note"`
+- `region.startLine` when `line_number` is present
+- AI confidence stored in `result.properties.confidence`
 
 **Errors**
 - `404 Not Found` — analysis not found or belongs to another user

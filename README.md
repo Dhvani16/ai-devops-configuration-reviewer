@@ -4,14 +4,17 @@ A full-stack web application that reviews DevOps configuration files for securit
 
 ## What it does
 
-A developer submits a Dockerfile, Docker Compose file, or GitHub Actions workflow. The system:
+A developer submits a Dockerfile, Docker Compose file, GitHub Actions workflow, Kubernetes manifest, or Terraform configuration. The system:
 
-1. Runs deterministic rule-based checks (5–10 focused rules per type)
-2. Sends the configuration and those findings to an LLM with a structured prompt
-3. Validates the LLM response against a Pydantic schema
-4. Calculates a deterministic risk score (never delegated to the AI)
-5. Persists findings and serves them through a typed REST API
-6. Displays results in a dashboard with severity badges, expandable finding cards, and full history
+1. Runs deterministic rule-based checks (5–15 focused rules per type)
+2. Returns static findings immediately (HTTP 202) while AI analysis runs in the background
+3. Sends the configuration and those findings to an LLM with a structured prompt
+4. Validates the LLM response against a Pydantic schema
+5. Calculates a deterministic risk score (never delegated to the AI)
+6. Persists findings and serves them through a typed REST API
+7. Displays results in a dashboard with severity badges, category filters, confidence threshold slider, and full history
+8. Optionally exports findings as a SARIF file for GitHub Code Scanning
+9. Optionally posts a Slack notification when analysis completes
 
 This demonstrates why combining deterministic analysis with AI is better than using an LLM alone: rules catch known patterns reliably; AI adds contextual reasoning, subtle issues, and actionable recommendations.
 
@@ -25,15 +28,22 @@ flowchart TB
 
     subgraph Backend["FastAPI Backend"]
         B[REST API]
-        C[Analysis Pipeline]
-        D[Static Analyzers\nDockerfile · Compose · GitHub Actions]
+        C[Analysis Pipeline\nasync · BackgroundTasks]
+        D[Static Analyzers\nDockerfile · Compose · GitHub Actions\nKubernetes · Terraform]
         E[AI Provider Abstraction\nOpenAI · Ollama · Mock]
         F[Deterministic Risk Scorer]
         G[Prometheus Metrics]
+        N[Slack Notifications]
+        S[Scheduled Re-analysis\nasyncio loop]
     end
 
     subgraph Storage
         H[(PostgreSQL)]
+    end
+
+    subgraph Observability
+        P[Prometheus :9090]
+        GF[Grafana :3001]
     end
 
     A -->|JWT Bearer| B
@@ -46,13 +56,17 @@ flowchart TB
     H --> B
     B --> A
     B --> G
+    G --> P
+    P --> GF
+    C --> N
+    S --> C
 ```
 
 ```mermaid
 flowchart LR
     Push[Git push] --> CI[GitHub Actions]
     CI --> Lint[Ruff · ESLint · tsc]
-    CI --> Tests[pytest 57 tests]
+    CI --> Tests[pytest 90 tests]
     CI --> Build[Docker image builds]
 ```
 
@@ -65,7 +79,8 @@ flowchart LR
 | Database | PostgreSQL 16, Alembic migrations, asyncpg |
 | Auth | JWT (PyJWT), Argon2 password hashing (pwdlib) |
 | AI | OpenAI Responses API / Ollama — provider abstraction, strict JSON schema |
-| Observability | Structured JSON logs, Prometheus metrics at `/metrics` |
+| Observability | Structured JSON logs, Prometheus metrics at `/metrics`, Grafana dashboards |
+| Notifications | Slack webhook (opt-in via `SLACK_WEBHOOK_URL`) |
 | Security | Security headers middleware, `slowapi` rate limiting |
 | CI/CD | GitHub Actions (lint → test → Docker build) |
 | Containerisation | Docker, Docker Compose |
@@ -84,6 +99,8 @@ docker compose up --build
 | Backend API | http://localhost:8000 |
 | API docs | http://localhost:8000/docs |
 | Prometheus metrics | http://localhost:8000/metrics |
+| Prometheus UI | http://localhost:9090 |
+| Grafana | http://localhost:3001 (admin / `GRAFANA_ADMIN_PASSWORD`) |
 
 > The backend Docker image runs `alembic upgrade head` automatically before starting, so no manual migration step is needed.
 
@@ -101,6 +118,9 @@ docker compose up --build
 | `CORS_ORIGINS` | no | `http://localhost:3000` | Comma-separated allowed origins |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | no | `30` | JWT lifetime |
 | `LOG_LEVEL` | no | `INFO` | Logging level |
+| `SLACK_WEBHOOK_URL` | no | — | Slack incoming webhook URL; omit to disable notifications |
+| `SCHEDULED_REANALYSIS_INTERVAL_HOURS` | no | `0` | Re-analyze all configs every N hours; `0` disables |
+| `GRAFANA_ADMIN_PASSWORD` | no | `admin` | Grafana admin password |
 
 See `.env.example` for all variables including PostgreSQL settings.
 
@@ -127,7 +147,7 @@ npm run dev
 ## Testing
 
 ```bash
-# Backend (57 tests, no API key or database needed)
+# Backend (90 tests, no API key or database needed)
 cd backend
 pytest tests/ -v
 
@@ -164,11 +184,13 @@ For both platforms:
 
 ## Supported configuration types
 
-| Type | File | Rules |
+| Type | Rules | Key checks |
 |---|---|---|
-| Dockerfile | `Dockerfile`, any file | Root user, latest tag, secrets in ENV/ARG, layer count, missing HEALTHCHECK, unsafe package install |
-| Docker Compose | `docker-compose.yml`, `compose.yml` | Privileged containers, host networking, Docker socket mount, hard-coded secrets, missing restart policy |
-| GitHub Actions | `.github/workflows/*.yml` | Unpinned actions, pull_request_target risks, excessive permissions, secrets in run steps, dangerous expressions |
+| Dockerfile | 9 | Root user, latest tag, secrets in ENV/ARG, layer count, missing HEALTHCHECK, unsafe package install |
+| Docker Compose | 7 | Privileged containers, host networking, Docker socket mount, hard-coded secrets, missing restart policy |
+| GitHub Actions | 7 | Unpinned actions, pull_request_target risks, excessive permissions, secrets in run steps, dangerous expressions |
+| Kubernetes | 9 | Default namespace, host network/PID, unpinned images, privileged/root containers, missing resource limits, missing readiness probe |
+| Terraform / HCL | 7 | Hard-coded secrets, open security groups, public S3 ACLs, unencrypted storage, missing provider version, unencrypted S3 backend, publicly accessible RDS |
 
 ## Risk scoring
 
@@ -182,15 +204,6 @@ Score = 100 − Σ(severity weight per finding), clamped to [0, 100].
 | Low | 1 |
 
 The score is always calculated by the backend. The AI never sets the final score.
-
-## Future enhancements
-
-- Support for Kubernetes manifests and Terraform files
-- GitHub App integration (auto-review on PR)
-- Scheduled re-analysis when rule sets are updated
-- Export findings as SARIF for GitHub Security tab
-- Team accounts and shared history
-- Persistent Prometheus + Grafana setup
 
 ## Documentation
 

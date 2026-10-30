@@ -22,6 +22,11 @@ Open `.env` and set:
 - `OPENAI_API_KEY` — only required if `AI_PROVIDER=openai` (the default)
 - Leave PostgreSQL variables as-is for local Docker development
 
+Optional integrations (leave blank to disable):
+- `SLACK_WEBHOOK_URL` — Slack incoming webhook URL for analysis completion notifications
+- `SCHEDULED_REANALYSIS_INTERVAL_HOURS` — positive integer to enable scheduled re-analysis
+- `GRAFANA_ADMIN_PASSWORD` — Grafana admin password (default: `admin`)
+
 Never commit `.env`.
 
 ## Start with Docker (recommended)
@@ -30,7 +35,7 @@ Never commit `.env`.
 docker compose up --build
 ```
 
-This starts PostgreSQL, runs Alembic migrations, starts the FastAPI backend, and builds and starts the Next.js frontend.
+This starts PostgreSQL, runs Alembic migrations, starts the FastAPI backend, builds and starts the Next.js frontend, and starts Prometheus and Grafana.
 
 | Service | URL |
 |---|---|
@@ -38,6 +43,8 @@ This starts PostgreSQL, runs Alembic migrations, starts the FastAPI backend, and
 | Backend API | http://localhost:8000 |
 | API docs | http://localhost:8000/docs |
 | Prometheus metrics | http://localhost:8000/metrics |
+| Prometheus UI | http://localhost:9090 |
+| Grafana | http://localhost:3001 |
 
 Stop with `docker compose down`. Use `docker compose down -v` only if you want to wipe the local PostgreSQL data volume.
 
@@ -91,7 +98,7 @@ cd backend
 pytest tests/ -v
 ```
 
-All 57 tests use an in-memory SQLite database and `MockAIProvider`. No OpenAI key, Ollama installation, or running PostgreSQL is needed.
+All 90 tests use an in-memory SQLite database and `MockAIProvider`. No OpenAI key, Ollama installation, or running PostgreSQL is needed.
 
 ## Linting and formatting
 
@@ -127,8 +134,11 @@ Review auto-generated migrations before committing — Alembic does not always d
 ├── .github/workflows/ci.yml   — GitHub Actions CI
 ├── backend/
 │   ├── app/                   — FastAPI application
+│   │   ├── analyzers/         — Static rule engines (dockerfile, compose, github_actions, kubernetes, terraform)
+│   │   ├── services/          — Business logic (pipeline, sarif, notifications, scheduler)
+│   │   └── ...
 │   ├── migrations/            — Alembic migration scripts
-│   ├── tests/                 — pytest test suite
+│   ├── tests/                 — pytest test suite (90 tests)
 │   ├── Dockerfile
 │   └── pyproject.toml
 ├── frontend/
@@ -137,6 +147,10 @@ Review auto-generated migrations before committing — Alembic does not always d
 │   ├── lib/                   — API client and TypeScript types
 │   ├── Dockerfile
 │   └── package.json
+├── observability/
+│   ├── prometheus.yml         — Prometheus scrape config
+│   └── grafana/
+│       └── provisioning/      — Auto-provisioned datasource and starter dashboard
 ├── docs/                      — Architecture, API, Security, Contributing
 ├── docker-compose.yml
 ├── .env.example

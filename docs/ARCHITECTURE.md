@@ -4,7 +4,11 @@
 
 The application is a three-tier monorepo: a Next.js frontend, a FastAPI backend, and a PostgreSQL database. All business logic lives in a single FastAPI application — no microservices, no message queues — to keep it maintainable for a solo developer.
 
+An optional observability stack (Prometheus + Grafana) and a Slack webhook integration are available as opt-in services via environment variables.
+
 ## Request flow
+
+Analysis creation uses a two-stage async pattern: the HTTP response returns immediately with static findings while AI analysis runs in the background.
 
 ```mermaid
 sequenceDiagram
@@ -12,6 +16,7 @@ sequenceDiagram
     participant Next.js
     participant FastAPI
     participant StaticAnalyzer
+    participant BackgroundTask
     participant AIProvider
     participant PostgreSQL
 
@@ -22,13 +27,17 @@ sequenceDiagram
     Next.js->>FastAPI: POST /api/v1/configurations/{id}/analyze
     FastAPI->>StaticAnalyzer: analyze(content)
     StaticAnalyzer-->>FastAPI: []Finding
+    FastAPI->>PostgreSQL: Persist Analysis (status=pending) + static findings
+    FastAPI-->>Next.js: 202 Accepted (pending Analysis)
 
-    FastAPI->>AIProvider: analyze(config + static findings)
-    AIProvider-->>FastAPI: AIAnalysisResponse (validated JSON)
+    Note over FastAPI,BackgroundTask: Background task starts
+    BackgroundTask->>AIProvider: analyze(config + static findings)
+    AIProvider-->>BackgroundTask: AIAnalysisResponse (validated JSON)
+    BackgroundTask->>BackgroundTask: calculate_score(all findings)
+    BackgroundTask->>PostgreSQL: Persist AI findings, mark completed
 
-    FastAPI->>FastAPI: calculate_score(all findings)
-    FastAPI->>PostgreSQL: Persist Analysis + FindingRecords
-    FastAPI-->>Next.js: AnalysisResponse
+    Next.js->>FastAPI: GET /api/v1/analyses/{id} (polling every 2s)
+    FastAPI-->>Next.js: AnalysisResponse (status=completed)
     Next.js-->>Browser: Results dashboard
 ```
 
@@ -40,8 +49,8 @@ backend/app/
 │   ├── deps.py              — FastAPI dependencies (DB session, current user, AI provider)
 │   └── routes/
 │       ├── auth.py          — POST /register, POST /login, GET /me
-│       ├── configurations.py — CRUD + POST /{id}/analyze
-│       ├── analyses.py      — GET /analyses, GET /analyses/{id}
+│       ├── configurations.py — CRUD + POST /{id}/analyze (returns 202)
+│       ├── analyses.py      — GET /analyses, GET /analyses/{id}, GET /analyses/{id}/sarif
 │       └── health.py        — GET /health, GET /ready, GET /metrics
 ├── core/
 │   ├── config.py            — Pydantic Settings (env-backed, validated at startup)
@@ -57,14 +66,19 @@ backend/app/
 │   ├── auth.py              — User creation, authentication
 │   ├── configurations.py    — CRUD enforcing user ownership
 │   ├── analyses.py          — Queries JOINing Analysis → Configuration for auth
-│   ├── analysis_pipeline.py — Orchestrates static → AI → score → persist
+│   ├── analysis_pipeline.py — Orchestrates static → AI → score → persist (sync + async stages)
 │   ├── ai_analysis.py       — AIAnalysisService wrapping provider calls
-│   └── scoring.py           — calculate_score() — deterministic, never delegated to AI
+│   ├── scoring.py           — calculate_score() — deterministic, never delegated to AI
+│   ├── sarif.py             — analysis_to_sarif() — SARIF 2.1 export
+│   ├── notifications.py     — notify_analysis_complete() — Slack webhook (opt-in)
+│   └── scheduler.py         — start/stop asyncio task for periodic re-analysis
 ├── analyzers/               — Deterministic rule engines
 │   ├── interface.py         — ConfigurationAnalyzer ABC + Finding + FindingSeverity
-│   ├── dockerfile.py        — DockerfileAnalyzer (8 rules)
+│   ├── dockerfile.py        — DockerfileAnalyzer (9 rules)
 │   ├── compose.py           — ComposeAnalyzer (7 rules)
 │   ├── github_actions.py    — GitHubActionsAnalyzer (7 rules)
+│   ├── kubernetes.py        — KubernetesAnalyzer (9 rules, multi-doc YAML)
+│   ├── terraform.py         — TerraformAnalyzer (7 rules, regex-based HCL)
 │   └── factory.py           — get_analyzer(ConfigurationType) dispatch
 ├── ai/
 │   ├── provider.py          — AIProvider ABC + AIProviderError
@@ -138,19 +152,25 @@ flowchart TD
     B --> C{Valid content?}
     C -- No --> D[InvalidConfigurationError\nHTTP 422]
     C -- Yes --> E[Static findings list]
-    E --> F[AI provider\nOpenAI / Ollama / Mock]
-    F --> G{AI available?}
-    G -- No --> H[Log warning\ncontinue with static only]
-    G -- Yes --> I[AIAnalysisResponse\nPydantic-validated]
-    E --> J[Merge all findings]
-    I --> J
-    H --> J
-    J --> K[calculate_score\nweighted deduction]
-    K --> L[Persist Analysis\n+ FindingRecord rows]
-    L --> M[Return loaded Analysis]
+    E --> F[Persist Analysis\nstatus=pending]
+    F --> G[HTTP 202 returned\nto caller]
+    F --> H[BackgroundTask starts]
+    H --> I[AI provider\nOpenAI / Ollama / Mock]
+    I --> J{AI available?}
+    J -- No --> K[Log warning\ncontinue with static only]
+    J -- Yes --> L[AIAnalysisResponse\nPydantic-validated]
+    E --> M[Merge all findings]
+    L --> M
+    K --> M
+    M --> N[calculate_score\nweighted deduction]
+    N --> O[Persist AI findings\nmark status=completed]
+    O --> P[Slack notification\nopt-in]
 ```
 
-Key invariant: `calculate_score` is always called by the backend with deterministic weights. The AI never sets the overall score.
+Key invariants:
+- `calculate_score` is always called by the backend with deterministic weights. The AI never sets the overall score.
+- The analysis row is written with `status=pending` before the HTTP response is sent, so callers can poll immediately.
+- The background task opens its own database session — the request session is already closed by the time it runs.
 
 ## AI provider abstraction
 
@@ -181,12 +201,37 @@ classDiagram
 
 The `AIProvider` ABC means the rest of the application never imports OpenAI or Ollama directly. Tests inject `MockAIProvider` via FastAPI dependency overrides with no real API calls.
 
+## Observability
+
+Prometheus scrapes `backend:8000/metrics` every 15 seconds. Grafana is auto-provisioned with a Prometheus datasource and a starter dashboard.
+
+```text
+observability/
+├── prometheus.yml                          — scrape config
+└── grafana/
+    └── provisioning/
+        ├── datasources/prometheus.yml      — auto-provisioned Prometheus datasource
+        └── dashboards/
+            ├── dashboards.yml              — dashboard provider config
+            └── ai-devops-reviewer.json     — starter dashboard (RPS, latency, analyses, AI errors)
+```
+
+Tracked metrics:
+- `http_requests_total` — counter by method, endpoint, status
+- `http_request_duration_seconds` — histogram by method, endpoint
+- `analyses_total` — counter of completed analyses
+- `ai_provider_failures_total` — counter of AI provider errors
+
+## Scheduler
+
+A plain asyncio task loop (no APScheduler or Celery dependency) runs inside the FastAPI process, started and stopped via the `lifespan` context manager. When `SCHEDULED_REANALYSIS_INTERVAL_HOURS > 0` it calls the full analysis pipeline for every configuration on each tick, each in its own database session.
+
 ## CI/CD pipeline
 
 ```mermaid
 flowchart LR
     Push[git push] --> Trigger[GitHub Actions]
-    Trigger --> Backend[backend job\nRuff lint + format\npytest 57 tests]
+    Trigger --> Backend[backend job\nRuff lint + format\npytest 90 tests]
     Trigger --> Frontend[frontend job\nESLint + tsc\nnext build]
     Backend --> Docker[docker job\nbuild backend image\nbuild frontend image]
     Frontend --> Docker
@@ -202,3 +247,4 @@ Permissions are set to `contents: read` (least privilege). The Docker job only r
 - Security headers (`X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy`, `Permissions-Policy`) are applied to every response via middleware.
 - Auth endpoints are rate-limited per IP (20 registrations/minute, 30 logins/minute).
 - All logs are structured JSON. Passwords, tokens, and API keys are never logged.
+- SARIF export requires authentication — the JWT is passed in the `Authorization` header, not a URL query parameter, to avoid token leakage in server logs.

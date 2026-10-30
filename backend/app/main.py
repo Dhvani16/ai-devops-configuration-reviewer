@@ -2,7 +2,8 @@
 
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,8 +21,19 @@ from app.core.limiter import limiter
 from app.core.logging import configure_logging
 from app.core.metrics import REQUEST_COUNT, REQUEST_DURATION
 from app.middleware.security import SecurityHeadersMiddleware
+from app.services.scheduler import start_scheduler, stop_scheduler
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings = get_settings()
+    start_scheduler(settings)
+    try:
+        yield
+    finally:
+        stop_scheduler()
 
 
 def create_app() -> FastAPI:
@@ -32,6 +44,7 @@ def create_app() -> FastAPI:
         title="AI DevOps Configuration Reviewer API",
         version="0.1.0",
         description="Backend service for configuration analysis.",
+        lifespan=lifespan,
     )
 
     application.state.limiter = limiter

@@ -57,6 +57,9 @@ export const createConfiguration = (data: ConfigurationCreate) =>
 export const listConfigurations = () =>
   request<ConfigurationResponse[]>('/api/v1/configurations/')
 
+export const getConfiguration = (id: string) =>
+  request<ConfigurationResponse>(`/api/v1/configurations/${id}`)
+
 export const deleteConfiguration = (id: string) =>
   request<void>(`/api/v1/configurations/${id}`, { method: 'DELETE' })
 
@@ -68,3 +71,18 @@ export const listAnalyses = () =>
 
 export const getAnalysis = (id: string) =>
   request<AnalysisResponse>(`/api/v1/analyses/${id}`)
+
+export async function downloadSarif(analysisId: string): Promise<void> {
+  const token = getToken()
+  const res = await fetch(`${API_BASE}/api/v1/analyses/${analysisId}/sarif`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) throw new ApiError(res.status, 'SARIF export failed')
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `analysis-${analysisId}.sarif`
+  a.click()
+  URL.revokeObjectURL(url)
+}

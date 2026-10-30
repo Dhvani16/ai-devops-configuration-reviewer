@@ -9,6 +9,8 @@ class ConfigurationType(str, Enum):
     DOCKERFILE = "dockerfile"
     DOCKER_COMPOSE = "docker_compose"
     GITHUB_ACTIONS = "github_actions"
+    KUBERNETES = "kubernetes"
+    TERRAFORM = "terraform"
 
 
 class FindingCategory(str, Enum):

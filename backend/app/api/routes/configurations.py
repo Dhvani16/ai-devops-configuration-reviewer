@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.provider import AIProvider
@@ -17,7 +17,7 @@ from app.schemas.configuration import (
     ConfigurationDetailResponse,
     ConfigurationResponse,
 )
-from app.services.analysis_pipeline import run_analysis_pipeline
+from app.services.analysis_pipeline import complete_analysis_async, create_pending_analysis
 from app.services.configurations import (
     create_configuration,
     delete_configuration,
@@ -68,9 +68,14 @@ async def delete(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Configuration not found")
 
 
-@router.post("/{configuration_id}/analyze", response_model=AnalysisResponse)
+@router.post(
+    "/{configuration_id}/analyze",
+    response_model=AnalysisResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def analyze(
     configuration_id: UUID,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
@@ -80,9 +85,19 @@ async def analyze(
     if config is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Configuration not found")
     try:
-        return await run_analysis_pipeline(config, session, settings, ai_provider=ai_provider)  # type: ignore[return-value]
+        analysis, static_findings = await create_pending_analysis(config, session)
     except InvalidConfigurationError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Invalid configuration content: {exc}",
         ) from exc
+
+    background_tasks.add_task(
+        complete_analysis_async,
+        analysis.id,
+        config.id,
+        static_findings,
+        settings,
+        ai_provider,
+    )
+    return analysis  # type: ignore[return-value]

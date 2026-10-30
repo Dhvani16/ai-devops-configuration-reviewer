@@ -4,12 +4,19 @@ import { useEffect, useState } from 'react'
 import { use } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { getAnalysis, listConfigurations } from '@/lib/api'
+import { ApiError, analyzeConfiguration, downloadSarif, getAnalysis, getConfiguration } from '@/lib/api'
 import { useAuth } from '@/components/AuthProvider'
 import SeverityBadge from '@/components/SeverityBadge'
-import type { AnalysisResponse, ConfigurationResponse, FindingResponse, FindingSeverity } from '@/lib/types'
+import type { AnalysisResponse, ConfigurationResponse, FindingCategory, FindingResponse, FindingSeverity } from '@/lib/types'
 
 const SEVERITY_ORDER: FindingSeverity[] = ['critical', 'high', 'medium', 'low']
+const CATEGORIES: { value: FindingCategory | 'all'; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'security', label: 'Security' },
+  { value: 'reliability', label: 'Reliability' },
+  { value: 'performance', label: 'Performance' },
+  { value: 'maintainability', label: 'Maintainability' },
+]
 
 function scoreColor(score: number): string {
   if (score >= 80) return 'score-great'
@@ -31,6 +38,8 @@ function configTypeLabel(t: string): string {
     dockerfile: 'Dockerfile',
     docker_compose: 'Docker Compose',
     github_actions: 'GitHub Actions',
+    kubernetes: 'Kubernetes',
+    terraform: 'Terraform',
   }
   return labels[t] ?? t
 }
@@ -118,6 +127,11 @@ export default function AnalysisResultsPage({ params }: { params: Promise<{ id: 
   const [config, setConfig] = useState<ConfigurationResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [activeCategory, setActiveCategory] = useState<FindingCategory | 'all'>('all')
+  const [minConfidence, setMinConfidence] = useState(0)
+  const [reanalyzing, setReanalyzing] = useState(false)
+  const [reanalyzeError, setReanalyzeError] = useState('')
+  const [sarifDownloading, setSarifDownloading] = useState(false)
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login')
@@ -125,24 +139,66 @@ export default function AnalysisResultsPage({ params }: { params: Promise<{ id: 
 
   useEffect(() => {
     if (!user) return
-    Promise.all([getAnalysis(id), listConfigurations()])
-      .then(([a, configs]) => {
+    getAnalysis(id)
+      .then((a) => {
         setAnalysis(a)
-        setConfig(configs.find((c) => c.id === a.configuration_id) ?? null)
+        return getConfiguration(a.configuration_id)
       })
+      .then(setConfig)
       .catch(() => setError('Failed to load analysis.'))
       .finally(() => setLoading(false))
   }, [user, id])
+
+  // Poll every 2 s while the analysis is pending/running
+  useEffect(() => {
+    const status = analysis?.status
+    if (!status || (status !== 'pending' && status !== 'running')) return
+    const timer = setInterval(() => {
+      getAnalysis(id).then((a) => {
+        setAnalysis(a)
+        if (a.status !== 'pending' && a.status !== 'running') clearInterval(timer)
+      }).catch(() => clearInterval(timer))
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [analysis?.status, id])
+
+  async function handleReanalyze() {
+    if (!analysis) return
+    setReanalyzing(true)
+    setReanalyzeError('')
+    try {
+      const newAnalysis = await analyzeConfiguration(analysis.configuration_id)
+      router.push(`/analyses/${newAnalysis.id}`)
+    } catch (err) {
+      setReanalyzeError(err instanceof ApiError ? err.message : 'Re-analysis failed.')
+      setReanalyzing(false)
+    }
+  }
+
+  async function handleDownloadSarif() {
+    setSarifDownloading(true)
+    try {
+      await downloadSarif(id)
+    } finally {
+      setSarifDownloading(false)
+    }
+  }
 
   if (authLoading || !user) return null
   if (loading) return <main className="page"><p className="muted">Loading…</p></main>
   if (error) return <main className="page"><p className="error-msg">{error}</p></main>
   if (!analysis) return null
 
+  const isPending = analysis.status === 'pending' || analysis.status === 'running'
   const score = analysis.overall_score ?? 0
+
+  const visibleFindings = analysis.findings
+    .filter((f) => activeCategory === 'all' || f.category === activeCategory)
+    .filter((f) => f.confidence === null || f.confidence * 100 >= minConfidence)
+
   const findingsBySeverity = SEVERITY_ORDER.map((sev) => ({
     severity: sev,
-    findings: analysis.findings.filter((f) => f.severity === sev),
+    findings: visibleFindings.filter((f) => f.severity === sev),
   })).filter((g) => g.findings.length > 0)
 
   const aiCount = analysis.findings.filter((f) => f.source === 'ai').length
@@ -156,6 +212,25 @@ export default function AnalysisResultsPage({ params }: { params: Promise<{ id: 
         {' / '}
         <span>{config?.name ?? 'Analysis'}</span>
       </p>
+
+      {/* Pending / running banner */}
+      {isPending && (
+        <div style={{
+          marginBottom: '1.5rem',
+          padding: '0.875rem 1.25rem',
+          background: '#1c1a0f',
+          border: '1px solid #713f12',
+          borderRadius: '0.5rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+        }}>
+          <span className="spinner" style={{ width: '1rem', height: '1rem', flexShrink: 0 }} />
+          <span style={{ color: '#fbbf24', fontSize: '0.9rem' }}>
+            AI analysis is running — static findings shown below. Results will update automatically.
+          </span>
+        </div>
+      )}
 
       {/* Header card */}
       <div className="card" style={{ marginBottom: '2rem', display: 'flex', gap: '2rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -196,24 +271,115 @@ export default function AnalysisResultsPage({ params }: { params: Promise<{ id: 
         </div>
       </div>
 
-      {/* Source summary */}
-      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <span>
-          <span className="source-tag source-deterministic">{staticCount} Static</span>
-        </span>
-        <span>
-          <span className="source-tag source-ai">{aiCount} AI</span>
-        </span>
+      {/* Source summary + Re-analyze */}
+      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <span><span className="source-tag source-deterministic">{staticCount} Static</span></span>
+        <span><span className="source-tag source-ai">{aiCount} AI</span></span>
         <span className="muted" style={{ fontSize: '0.8125rem', alignSelf: 'center' }}>
           {analysis.findings.length} total finding{analysis.findings.length !== 1 ? 's' : ''}
         </span>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={handleDownloadSarif}
+            disabled={sarifDownloading || isPending}
+            title="Download SARIF 2.1 (GitHub Code Scanning compatible)"
+          >
+            {sarifDownloading ? '…' : '↓ SARIF'}
+          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={handleReanalyze}
+              disabled={reanalyzing}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+            >
+              {reanalyzing ? (
+                <><span className="spinner" style={{ width: '0.75rem', height: '0.75rem' }} /> Re-analyzing…</>
+              ) : (
+                '↻ Re-analyze'
+              )}
+            </button>
+            {reanalyzeError && (
+              <p className="error-msg" style={{ margin: 0, fontSize: '0.75rem' }}>{reanalyzeError}</p>
+            )}
+          </div>
+        </div>
       </div>
 
+      {/* Category filter tabs */}
+      <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        {CATEGORIES.map(({ value, label }) => {
+          const count = value === 'all'
+            ? analysis.findings.length
+            : analysis.findings.filter((f) => f.category === value).length
+          const active = activeCategory === value
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setActiveCategory(value)}
+              className="btn btn-secondary btn-sm"
+              style={{
+                borderColor: active ? '#4f46e5' : '#374151',
+                color: active ? '#a5b4fc' : '#9ca3af',
+                backgroundColor: active ? '#1e1b4b' : 'transparent',
+              }}
+            >
+              {label}
+              <span style={{
+                marginLeft: '0.375rem',
+                background: active ? '#4f46e5' : '#374151',
+                color: '#fff',
+                borderRadius: '9999px',
+                padding: '0 0.4rem',
+                fontSize: '0.7rem',
+                fontWeight: 600,
+              }}>
+                {count}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* AI confidence threshold slider */}
+      {aiCount > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          marginBottom: '1.5rem',
+          padding: '0.625rem 1rem',
+          background: '#111827',
+          border: '1px solid #1f2937',
+          borderRadius: '0.5rem',
+        }}>
+          <span className="muted" style={{ fontSize: '0.8125rem', flexShrink: 0 }}>
+            Min AI confidence
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={minConfidence}
+            onChange={(e) => setMinConfidence(Number(e.target.value))}
+            style={{ flex: 1, accentColor: '#4f46e5', cursor: 'pointer' }}
+          />
+          <span style={{ fontSize: '0.8125rem', color: '#a5b4fc', fontWeight: 600, minWidth: '2.5rem', textAlign: 'right' }}>
+            {minConfidence}%
+          </span>
+        </div>
+      )}
+
       {/* Findings */}
-      {analysis.findings.length === 0 ? (
+      {visibleFindings.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: '2.5rem' }}>
           <p style={{ color: '#4ade80', fontWeight: 600, fontSize: '1.125rem', margin: 0 }}>
-            No findings — configuration looks clean!
+            {activeCategory === 'all'
+              ? 'No findings — configuration looks clean!'
+              : `No ${activeCategory} findings.`}
           </p>
         </div>
       ) : (

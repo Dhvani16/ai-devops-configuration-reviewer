@@ -19,6 +19,7 @@ from app.analyzers.dockerfile import DockerfileAnalyzer
             "FROM python:3.12\n" + "\n".join("RUN echo test" for _ in range(11)) + "\nUSER app",
             "dockerfile-excessive-layers",
         ),
+        ("FROM python:3.12\nUSER app", "dockerfile-missing-healthcheck"),
     ],
 )
 def test_dockerfile_rules(content: str, rule_id: str) -> None:
@@ -27,7 +28,20 @@ def test_dockerfile_rules(content: str, rule_id: str) -> None:
     assert rule_id in {finding.rule_id for finding in findings}
 
 
-def test_digest_pinned_non_root_dockerfile_has_no_findings() -> None:
-    content = "FROM python@sha256:" + "a" * 64 + "\nUSER app"
+def test_dockerfile_healthcheck_present_no_finding() -> None:
+    content = (
+        "FROM python@sha256:" + "a" * 64 + "\n"
+        "HEALTHCHECK CMD curl -f http://localhost:8080/health || exit 1\n"
+        "USER app"
+    )
+    rule_ids = {f.rule_id for f in DockerfileAnalyzer().analyze(content)}
+    assert "dockerfile-missing-healthcheck" not in rule_ids
 
+
+def test_digest_pinned_non_root_dockerfile_has_no_findings() -> None:
+    content = (
+        "FROM python@sha256:" + "a" * 64 + "\n"
+        "HEALTHCHECK CMD curl -f http://localhost:8080/health || exit 1\n"
+        "USER app"
+    )
     assert DockerfileAnalyzer().analyze(content) == []

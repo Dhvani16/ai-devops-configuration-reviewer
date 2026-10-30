@@ -24,6 +24,8 @@ function configTypeLabel(t: string): string {
     dockerfile: 'Dockerfile',
     docker_compose: 'Docker Compose',
     github_actions: 'GitHub Actions',
+    kubernetes: 'Kubernetes',
+    terraform: 'Terraform',
   }
   return labels[t] ?? t
 }

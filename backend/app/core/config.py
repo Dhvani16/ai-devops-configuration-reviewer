@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.2"
     ai_max_input_characters: int = 20_000
     ai_max_output_tokens: int = 2_000
+    slack_webhook_url: str | None = None
+    scheduled_reanalysis_interval_hours: int = 0  # 0 = disabled
 
     @field_validator("secret_key")
     @classmethod

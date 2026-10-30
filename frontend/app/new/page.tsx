@@ -22,6 +22,16 @@ const CONFIG_TYPES: { value: ConfigurationType; label: string; placeholder: stri
     label: 'GitHub Actions',
     placeholder: 'name: CI\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      ...',
   },
+  {
+    value: 'kubernetes',
+    label: 'Kubernetes',
+    placeholder: 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api\nspec:\n  template:\n    spec:\n      containers:\n        - name: app\n          image: myapp:1.0\n          ...',
+  },
+  {
+    value: 'terraform',
+    label: 'Terraform',
+    placeholder: 'terraform {\n  required_providers {\n    aws = {\n      source  = "hashicorp/aws"\n      version = "~> 5.0"\n    }\n  }\n}\n\nresource "aws_instance" "web" {\n  ami           = "ami-0c55b159cbfafe1f0"\n  instance_type = "t3.micro"\n}\n',
+  },
 ]
 
 export default function NewAnalysisPage() {
@@ -67,6 +77,7 @@ export default function NewAnalysisPage() {
       })
       setStep('analyzing')
       const analysis = await analyzeConfiguration(config.id)
+      // 202 — navigate immediately; results page polls until complete
       router.push(`/analyses/${analysis.id}`)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Analysis failed. Please try again.')

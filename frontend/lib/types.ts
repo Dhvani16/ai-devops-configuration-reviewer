@@ -1,4 +1,4 @@
-export type ConfigurationType = 'dockerfile' | 'docker_compose' | 'github_actions'
+export type ConfigurationType = 'dockerfile' | 'docker_compose' | 'github_actions' | 'kubernetes' | 'terraform'
 export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low'
 export type FindingCategory = 'security' | 'reliability' | 'performance' | 'maintainability'
 export type FindingSource = 'deterministic' | 'ai'

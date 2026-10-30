@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+import app.db.session as db_session_module
 from app.ai.mock_provider import MockAIProvider
 from app.ai.schemas import AIAnalysisResponse
 from app.api.deps import get_ai_provider_dep
@@ -36,10 +37,15 @@ def client() -> TestClient:
         AIAnalysisResponse(findings=[])
     )
 
+    # Patch the module-level session factory so background tasks use the same in-memory DB
+    original_factory = db_session_module.AsyncSessionLocal
+    db_session_module.AsyncSessionLocal = factory
+
     with TestClient(app) as test_client:
         yield test_client
 
     app.dependency_overrides.clear()
+    db_session_module.AsyncSessionLocal = original_factory
     asyncio.run(engine.dispose())
 
 
@@ -104,13 +110,21 @@ def test_analyze_returns_findings_and_score(client: TestClient) -> None:
     )
     config_id = created.json()["id"]
 
+    # Analyze now returns 202 immediately with pending status + static findings
     result = client.post(f"/api/v1/configurations/{config_id}/analyze", headers=headers)
-    assert result.status_code == 200
+    assert result.status_code == 202
     body = result.json()
-    assert body["status"] == "completed"
-    assert body["overall_score"] is not None
+    assert body["status"] == "pending"
     assert isinstance(body["findings"], list)
-    assert len(body["findings"]) > 0  # deterministic findings always present
+    assert len(body["findings"]) > 0  # static findings are present immediately
+
+    # Background task runs synchronously in TestClient — fetch to confirm completion
+    analysis_id = body["id"]
+    fetched = client.get(f"/api/v1/analyses/{analysis_id}", headers=headers)
+    assert fetched.status_code == 200
+    completed = fetched.json()
+    assert completed["status"] == "completed"
+    assert completed["overall_score"] is not None
 
 
 def test_get_analysis_by_id(client: TestClient) -> None:

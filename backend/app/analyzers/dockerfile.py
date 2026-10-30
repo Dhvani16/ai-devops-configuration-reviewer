@@ -82,6 +82,22 @@ class DockerfileAnalyzer(ConfigurationAnalyzer):
                 )
             )
 
+        if not any(re.match(r"HEALTHCHECK\s+", line, re.IGNORECASE) for _, line in instructions):
+            findings.append(
+                _finding(
+                    "dockerfile-missing-healthcheck",
+                    FindingCategory.RELIABILITY,
+                    FindingSeverity.MEDIUM,
+                    "No HEALTHCHECK instruction defined",
+                    "Without a HEALTHCHECK, container orchestrators cannot detect when the application "
+                    "is unhealthy and will continue routing traffic to a broken container.",
+                    "Add a HEALTHCHECK instruction that probes the application's health endpoint "
+                    "or process, e.g. HEALTHCHECK CMD curl -f http://localhost:8080/health || exit 1",
+                    None,
+                    "No HEALTHCHECK instruction found",
+                )
+            )
+
         run_count = sum(bool(re.match(r"RUN\s+", line, re.IGNORECASE)) for _, line in instructions)
         if run_count > 10:
             findings.append(

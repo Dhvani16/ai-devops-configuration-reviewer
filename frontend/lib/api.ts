@@ -73,6 +73,9 @@ export const listAnalyses = () =>
 export const getAnalysis = (id: string) =>
   request<AnalysisResponse>(`/api/v1/analyses/${id}`)
 
+export const explainScore = (id: string) =>
+  request<{ explanation: string }>(`/api/v1/analyses/${id}/explain-score`)
+
 export const getRuleVersions = () =>
   request<Record<string, string>>('/api/v1/analyses/rule-versions')
 

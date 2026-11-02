@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { use } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ApiError, analyzeConfiguration, downloadSarif, getAnalysis, getChatHistory, getConfiguration, sendChatMessage } from '@/lib/api'
+import { ApiError, analyzeConfiguration, downloadSarif, explainScore, getAnalysis, getChatHistory, getConfiguration, sendChatMessage } from '@/lib/api'
 import { useAuth } from '@/components/AuthProvider'
 import SeverityBadge from '@/components/SeverityBadge'
 import type { AnalysisResponse, ChatMessage, ConfigurationResponse, FindingCategory, FindingResponse, FindingSeverity } from '@/lib/types'
@@ -291,6 +291,8 @@ export default function AnalysisResultsPage({ params }: { params: Promise<{ id: 
   const [reanalyzing, setReanalyzing] = useState(false)
   const [reanalyzeError, setReanalyzeError] = useState('')
   const [sarifDownloading, setSarifDownloading] = useState(false)
+  const [scoreExplanation, setScoreExplanation] = useState('')
+  const [scoreExplaining, setScoreExplaining] = useState(false)
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login')
@@ -331,6 +333,19 @@ export default function AnalysisResultsPage({ params }: { params: Promise<{ id: 
     } catch (err) {
       setReanalyzeError(err instanceof ApiError ? err.message : 'Re-analysis failed.')
       setReanalyzing(false)
+    }
+  }
+
+  async function handleExplainScore() {
+    setScoreExplaining(true)
+    setScoreExplanation('')
+    try {
+      const result = await explainScore(id)
+      setScoreExplanation(result.explanation)
+    } catch {
+      setScoreExplanation('Could not generate explanation.')
+    } finally {
+      setScoreExplaining(false)
     }
   }
 
@@ -392,42 +407,73 @@ export default function AnalysisResultsPage({ params }: { params: Promise<{ id: 
       )}
 
       {/* Header card */}
-      <div className="card" style={{ marginBottom: '2rem', display: 'flex', gap: '2rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ textAlign: 'center', minWidth: '7rem' }}>
-          <p
-            className={scoreColor(score)}
-            style={{ fontSize: '3.5rem', fontWeight: 700, lineHeight: 1, margin: 0 }}
-          >
-            {Math.round(score)}
-          </p>
-          <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Risk Score
-          </p>
-        </div>
-        <div style={{ flex: 1, minWidth: '12rem' }}>
-          <p style={{ margin: '0 0 0.25rem', fontWeight: 700, fontSize: '1.125rem', color: '#f9fafb' }}>
-            {config?.name ?? 'Configuration'}
-          </p>
-          <p className="muted" style={{ margin: 0 }}>
-            {config ? configTypeLabel(config.configuration_type) : ''} · {scoreLabel(score)}
-          </p>
-          {analysis.error_message && (
-            <p style={{ margin: '0.5rem 0 0', color: '#fbbf24', fontSize: '0.8125rem' }}>
-              ⚠ {analysis.error_message}
+      <div className="card" style={{ marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', gap: '2rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ textAlign: 'center', minWidth: '7rem' }}>
+            <p
+              className={scoreColor(score)}
+              style={{ fontSize: '3.5rem', fontWeight: 700, lineHeight: 1, margin: 0 }}
+            >
+              {Math.round(score)}
             </p>
-          )}
+            <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Risk Score
+            </p>
+            {!isPending && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleExplainScore}
+                disabled={scoreExplaining}
+                style={{ marginTop: '0.5rem', fontSize: '0.7rem', padding: '0.2rem 0.5rem' }}
+              >
+                {scoreExplaining ? '…' : 'Explain'}
+              </button>
+            )}
+          </div>
+          <div style={{ flex: 1, minWidth: '12rem' }}>
+            <p style={{ margin: '0 0 0.25rem', fontWeight: 700, fontSize: '1.125rem', color: '#f9fafb' }}>
+              {config?.name ?? 'Configuration'}
+            </p>
+            <p className="muted" style={{ margin: 0 }}>
+              {config ? configTypeLabel(config.configuration_type) : ''} · {scoreLabel(score)}
+            </p>
+            {analysis.error_message && (
+              <p style={{ margin: '0.5rem 0 0', color: '#fbbf24', fontSize: '0.8125rem' }}>
+                ⚠ {analysis.error_message}
+              </p>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'flex-end' }}>
+            {(['critical', 'high', 'medium', 'low'] as FindingSeverity[]).map((sev) => {
+              const count = analysis.findings.filter((f) => f.severity === sev).length
+              return count > 0 ? (
+                <span key={sev} style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
+                  <SeverityBadge severity={sev} />
+                  <span className="muted" style={{ fontSize: '0.8125rem' }}>{count}</span>
+                </span>
+              ) : null
+            })}
+          </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'flex-end' }}>
-          {(['critical', 'high', 'medium', 'low'] as FindingSeverity[]).map((sev) => {
-            const count = analysis.findings.filter((f) => f.severity === sev).length
-            return count > 0 ? (
-              <span key={sev} style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
-                <SeverityBadge severity={sev} />
-                <span className="muted" style={{ fontSize: '0.8125rem' }}>{count}</span>
-              </span>
-            ) : null
-          })}
-        </div>
+        {(scoreExplaining || scoreExplanation) && (
+          <div style={{
+            marginTop: '1rem',
+            paddingTop: '1rem',
+            borderTop: '1px solid #1f2937',
+          }}>
+            {scoreExplaining ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span className="spinner" style={{ width: '0.875rem', height: '0.875rem', flexShrink: 0 }} />
+                <span className="muted" style={{ fontSize: '0.875rem' }}>Generating explanation…</span>
+              </div>
+            ) : (
+              <p style={{ margin: 0, color: '#d1d5db', fontSize: '0.875rem', lineHeight: 1.7 }}>
+                {scoreExplanation}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Source summary + Re-analyze */}

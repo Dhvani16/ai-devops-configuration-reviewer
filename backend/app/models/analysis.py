@@ -9,6 +9,22 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 
+class FindingChatMessage(Base):
+    __tablename__ = "finding_chat_messages"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    finding_id: Mapped[UUID] = mapped_column(
+        ForeignKey("findings.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[str] = mapped_column(String(20))
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    finding: Mapped["FindingRecord"] = relationship("FindingRecord", back_populates="messages")
+
+
 class FindingRecord(Base):
     __tablename__ = "findings"
 
@@ -32,9 +48,13 @@ class FindingRecord(Base):
     )
 
     analysis: Mapped["Analysis"] = relationship("Analysis", back_populates="findings")
+    messages: Mapped[list["FindingChatMessage"]] = relationship(
+        "FindingChatMessage", back_populates="finding", cascade="all, delete-orphan"
+    )
 
 
 class Analysis(Base):
+
     __tablename__ = "analyses"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)

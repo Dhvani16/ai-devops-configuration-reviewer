@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { use } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ApiError, analyzeConfiguration, downloadSarif, getAnalysis, getConfiguration } from '@/lib/api'
+import { ApiError, analyzeConfiguration, downloadSarif, getAnalysis, getChatHistory, getConfiguration, sendChatMessage } from '@/lib/api'
 import { useAuth } from '@/components/AuthProvider'
 import SeverityBadge from '@/components/SeverityBadge'
-import type { AnalysisResponse, ConfigurationResponse, FindingCategory, FindingResponse, FindingSeverity } from '@/lib/types'
+import type { AnalysisResponse, ChatMessage, ConfigurationResponse, FindingCategory, FindingResponse, FindingSeverity } from '@/lib/types'
 
 const SEVERITY_ORDER: FindingSeverity[] = ['critical', 'high', 'medium', 'low']
 const CATEGORIES: { value: FindingCategory | 'all'; label: string }[] = [
@@ -47,6 +47,60 @@ function configTypeLabel(t: string): string {
 
 function FindingCard({ finding }: { finding: FindingResponse }) {
   const [open, setOpen] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const [chatError, setChatError] = useState('')
+  const [historyLoaded, setHistoryLoaded] = useState(false)
+  const bottomRef = useRef<HTMLDivElement>(null)
+
+  async function openChat() {
+    setChatOpen(true)
+    if (!historyLoaded) {
+      try {
+        const history = await getChatHistory(finding.id)
+        setMessages(history)
+      } catch {
+        // ignore — empty history is fine
+      }
+      setHistoryLoaded(true)
+    }
+  }
+
+  function toggleChat(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!chatOpen) {
+      openChat()
+    } else {
+      setChatOpen(false)
+    }
+  }
+
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    const text = chatInput.trim()
+    if (!text || chatLoading) return
+    setChatInput('')
+    setChatError('')
+    setChatLoading(true)
+    setMessages((prev) => [...prev, { id: 'tmp', finding_id: finding.id, role: 'user', content: text, created_at: new Date().toISOString() }])
+    try {
+      const reply = await sendChatMessage(finding.id, text)
+      setMessages((prev) => [...prev.filter((m) => m.id !== 'tmp'), { id: 'usr-' + reply.id, finding_id: finding.id, role: 'user', content: text, created_at: reply.created_at }, reply])
+    } catch (err) {
+      setChatError(err instanceof ApiError ? err.message : 'Failed to send message.')
+      setMessages((prev) => prev.filter((m) => m.id !== 'tmp'))
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (chatOpen) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, chatOpen])
+
   return (
     <div
       className="card"
@@ -71,6 +125,14 @@ function FindingCard({ finding }: { finding: FindingResponse }) {
             </p>
           )}
         </div>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={toggleChat}
+          style={{ flexShrink: 0, fontSize: '0.75rem', padding: '0.2rem 0.6rem' }}
+        >
+          {chatOpen ? 'Close chat' : '💬 Ask AI'}
+        </button>
         <span className="muted" style={{ fontSize: '1rem', flexShrink: 0 }}>
           {open ? '▲' : '▼'}
         </span>
@@ -135,6 +197,81 @@ function FindingCard({ finding }: { finding: FindingResponse }) {
               AI confidence: {Math.round(finding.confidence * 100)}%
             </p>
           )}
+        </div>
+      )}
+
+      {chatOpen && (
+        <div
+          style={{ marginTop: '1rem', borderTop: '1px solid #1f2937', paddingTop: '1rem' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="form-label" style={{ marginBottom: '0.625rem' }}>Remediation chat</p>
+          <div
+            style={{
+              background: '#0b1020',
+              border: '1px solid #1f2937',
+              borderRadius: '0.5rem',
+              padding: '0.75rem',
+              maxHeight: '16rem',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.625rem',
+              marginBottom: '0.625rem',
+            }}
+          >
+            {messages.length === 0 && (
+              <p className="muted" style={{ fontSize: '0.8125rem', textAlign: 'center', margin: '1rem 0' }}>
+                Ask a question about this finding — e.g. "Why is this dangerous?" or "Show me the fix."
+              </p>
+            )}
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                style={{
+                  alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                  maxWidth: '85%',
+                  background: msg.role === 'user' ? '#1e1b4b' : '#111827',
+                  border: `1px solid ${msg.role === 'user' ? '#3730a3' : '#374151'}`,
+                  borderRadius: '0.5rem',
+                  padding: '0.5rem 0.75rem',
+                  fontSize: '0.8125rem',
+                  color: msg.role === 'user' ? '#a5b4fc' : '#d1d5db',
+                  lineHeight: 1.55,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
+              >
+                {msg.content}
+              </div>
+            ))}
+            {chatLoading && (
+              <div style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span className="spinner" style={{ width: '0.75rem', height: '0.75rem' }} />
+                <span className="muted" style={{ fontSize: '0.75rem' }}>Thinking…</span>
+              </div>
+            )}
+            <div ref={bottomRef} />
+          </div>
+          {chatError && <p className="error-msg" style={{ fontSize: '0.75rem', margin: '0 0 0.5rem' }}>{chatError}</p>}
+          <form onSubmit={handleSend} style={{ display: 'flex', gap: '0.5rem' }}>
+            <input
+              type="text"
+              className="input"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="Ask about this finding…"
+              disabled={chatLoading}
+              style={{ flex: 1, fontSize: '0.875rem', padding: '0.5rem 0.75rem' }}
+            />
+            <button
+              type="submit"
+              className="btn btn-primary btn-sm"
+              disabled={chatLoading || !chatInput.trim()}
+            >
+              Send
+            </button>
+          </form>
         </div>
       )}
     </div>

@@ -3,6 +3,14 @@ export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low'
 export type FindingCategory = 'security' | 'reliability' | 'performance' | 'maintainability'
 export type FindingSource = 'deterministic' | 'ai'
 
+export interface ChatMessage {
+  id: string
+  finding_id: string
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string
+}
+
 export interface UserResponse {
   id: string
   email: string

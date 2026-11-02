@@ -1,5 +1,6 @@
 import type {
   AnalysisResponse,
+  ChatMessage,
   ConfigurationCreate,
   ConfigurationResponse,
   TokenResponse,
@@ -74,6 +75,15 @@ export const getAnalysis = (id: string) =>
 
 export const getRuleVersions = () =>
   request<Record<string, string>>('/api/v1/analyses/rule-versions')
+
+export const getChatHistory = (findingId: string) =>
+  request<ChatMessage[]>(`/api/v1/findings/${findingId}/chat`)
+
+export const sendChatMessage = (findingId: string, message: string) =>
+  request<ChatMessage>(`/api/v1/findings/${findingId}/chat`, {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  })
 
 export async function downloadSarif(analysisId: string): Promise<void> {
   const token = getToken()

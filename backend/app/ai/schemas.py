@@ -20,6 +20,10 @@ class AIAnalysisFinding(BaseModel):
     line_number: int | None = Field(default=None, ge=1)
     evidence: str = Field(min_length=1)
     confidence: float = Field(ge=0, le=1)
+    fix_suggestion: str | None = Field(
+        default=None,
+        description="A corrected code snippet replacing the problematic section. Null when not applicable.",
+    )
 
 
 class AIAnalysisResponse(BaseModel):

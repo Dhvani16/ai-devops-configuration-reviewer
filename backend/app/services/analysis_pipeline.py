@@ -114,6 +114,7 @@ async def _run_ai_and_finalize(
                 evidence=f.evidence,
                 source="ai",
                 confidence=f.confidence,
+                fix_suggestion=f.fix_suggestion,
             )
         )
 

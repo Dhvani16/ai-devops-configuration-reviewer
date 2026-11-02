@@ -90,8 +90,13 @@ def _finding_to_result(f: FindingRecord) -> dict[str, Any]:
             }
         ],
     }
-    if f.confidence is not None:
-        result["properties"] = {"confidence": round(f.confidence, 3)}
+    if f.confidence is not None or f.fix_suggestion is not None:
+        props: dict[str, Any] = {}
+        if f.confidence is not None:
+            props["confidence"] = round(f.confidence, 3)
+        if f.fix_suggestion is not None:
+            props["fix_suggestion"] = f.fix_suggestion
+        result["properties"] = props
     return result
 
 

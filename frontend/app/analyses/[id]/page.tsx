@@ -108,6 +108,27 @@ function FindingCard({ finding }: { finding: FindingResponse }) {
               {finding.recommendation}
             </p>
           </div>
+          {finding.fix_suggestion && (
+            <div>
+              <p className="form-label" style={{ marginBottom: '0.25rem' }}>Suggested fix</p>
+              <pre
+                style={{
+                  margin: 0,
+                  background: '#021a0f',
+                  border: '1px solid #14532d',
+                  borderRadius: '0.375rem',
+                  padding: '0.625rem 0.875rem',
+                  fontSize: '0.8125rem',
+                  color: '#86efac',
+                  overflowX: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
+              >
+                {finding.fix_suggestion}
+              </pre>
+            </div>
+          )}
           {finding.confidence !== null && (
             <p className="muted" style={{ fontSize: '0.75rem', margin: 0 }}>
               AI confidence: {Math.round(finding.confidence * 100)}%

@@ -20,6 +20,7 @@ class FindingResponse(BaseModel):
     evidence: str
     source: FindingSource
     confidence: float | None
+    fix_suggestion: str | None
 
     model_config = {"from_attributes": True}
 

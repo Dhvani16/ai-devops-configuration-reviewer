@@ -40,6 +40,7 @@ export interface FindingResponse {
   evidence: string
   source: FindingSource
   confidence: number | null
+  fix_suggestion: string | null
 }
 
 export interface AnalysisResponse {

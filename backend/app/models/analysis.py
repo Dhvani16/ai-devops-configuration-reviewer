@@ -26,6 +26,7 @@ class FindingRecord(Base):
     evidence: Mapped[str] = mapped_column(Text)
     source: Mapped[str] = mapped_column(String(20))
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fix_suggestion: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -48,6 +48,7 @@ export interface AnalysisResponse {
   configuration_id: string
   status: string
   overall_score: number | null
+  rule_version: string | null
   error_message: string | null
   created_at: string
   completed_at: string | null

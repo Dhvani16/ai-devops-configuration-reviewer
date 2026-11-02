@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analyzers.factory import RULE_VERSIONS
 from app.api.deps import get_current_user
 from app.db.session import get_db_session
 from app.models.user import User
@@ -14,6 +15,13 @@ from app.services.analyses import get_analysis, list_analyses
 from app.services.sarif import analysis_to_sarif
 
 router = APIRouter(prefix="/analyses", tags=["analyses"])
+
+
+@router.get("/rule-versions", tags=["analyses"])
+async def get_rule_versions() -> dict[str, str]:
+    """Return the current rule version string for every configuration type.
+    Clients compare a stored analysis.rule_version against these to detect staleness."""
+    return {ct.value: version for ct, version in RULE_VERSIONS.items()}
 
 
 @router.get("/", response_model=list[AnalysisResponse])

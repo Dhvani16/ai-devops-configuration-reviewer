@@ -17,7 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from app.ai.provider import AIProvider, AIProviderError
 from app.ai.schemas import AIAnalysisRequest
-from app.analyzers.factory import get_analyzer
+from app.analyzers.factory import get_analyzer, get_rule_version
 from app.analyzers.interface import (
     InvalidConfigurationError,  # noqa: F401 — re-exported for callers
 )
@@ -164,11 +164,13 @@ async def run_analysis_pipeline(
         InvalidConfigurationError: if the configuration content cannot be parsed.
     """
     static_findings = _run_static(configuration)
+    config_type = ConfigurationType(configuration.configuration_type)
 
     analysis = Analysis(
         id=uuid4(),
         configuration_id=configuration.id,
         status="running",
+        rule_version=get_rule_version(config_type),
     )
     session.add(analysis)
     await _persist_static_findings(analysis, static_findings, session)
@@ -191,11 +193,13 @@ async def create_pending_analysis(
     The caller is responsible for scheduling complete_analysis_async as a background task.
     """
     static_findings = _run_static(configuration)
+    config_type = ConfigurationType(configuration.configuration_type)
 
     analysis = Analysis(
         id=uuid4(),
         configuration_id=configuration.id,
         status="pending",
+        rule_version=get_rule_version(config_type),
     )
     session.add(analysis)
     await _persist_static_findings(analysis, static_findings, session)

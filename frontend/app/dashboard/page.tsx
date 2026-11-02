@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { listAnalyses, listConfigurations } from '@/lib/api'
+import { listAnalyses, listConfigurations, getRuleVersions } from '@/lib/api'
 import { useAuth } from '@/components/AuthProvider'
 import type { AnalysisResponse, ConfigurationResponse } from '@/lib/types'
 
@@ -35,6 +35,7 @@ export default function DashboardPage() {
   const router = useRouter()
   const [analyses, setAnalyses] = useState<AnalysisResponse[]>([])
   const [configs, setConfigs] = useState<ConfigurationResponse[]>([])
+  const [ruleVersions, setRuleVersions] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -44,10 +45,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user) return
-    Promise.all([listAnalyses(), listConfigurations()])
-      .then(([a, c]) => {
+    Promise.all([listAnalyses(), listConfigurations(), getRuleVersions()])
+      .then(([a, c, rv]) => {
         setAnalyses(a)
         setConfigs(c)
+        setRuleVersions(rv)
       })
       .catch(() => setError('Failed to load dashboard data.'))
       .finally(() => setLoading(false))
@@ -124,9 +126,30 @@ export default function DashboardPage() {
               {recent.map((a) => {
                 const cfg = configMap[a.configuration_id]
                 const score = a.overall_score
+                const isStale = cfg
+                  ? a.rule_version !== null && ruleVersions[cfg.configuration_type] !== undefined
+                    && a.rule_version !== ruleVersions[cfg.configuration_type]
+                  : false
                 return (
                   <tr key={a.id}>
-                    <td style={{ color: '#f9fafb', fontWeight: 500 }}>{cfg?.name ?? '—'}</td>
+                    <td style={{ color: '#f9fafb', fontWeight: 500 }}>
+                      {cfg?.name ?? '—'}
+                      {isStale && (
+                        <span title="Rules have been updated since this analysis ran" style={{
+                          marginLeft: '0.5rem',
+                          fontSize: '0.7rem',
+                          fontWeight: 600,
+                          color: '#fbbf24',
+                          background: '#1c1a0f',
+                          border: '1px solid #713f12',
+                          borderRadius: '9999px',
+                          padding: '0.1rem 0.5rem',
+                          verticalAlign: 'middle',
+                        }}>
+                          Rules updated
+                        </span>
+                      )}
+                    </td>
                     <td className="muted">{cfg ? configTypeLabel(cfg.configuration_type) : '—'}</td>
                     <td>
                       {score !== null ? (

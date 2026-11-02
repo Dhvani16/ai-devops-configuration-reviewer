@@ -30,6 +30,7 @@ class AnalysisResponse(BaseModel):
     configuration_id: UUID
     status: str
     overall_score: float | None
+    rule_version: str | None
     error_message: str | None
     created_at: datetime
     completed_at: datetime | None

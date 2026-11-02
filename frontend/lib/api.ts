@@ -72,6 +72,9 @@ export const listAnalyses = () =>
 export const getAnalysis = (id: string) =>
   request<AnalysisResponse>(`/api/v1/analyses/${id}`)
 
+export const getRuleVersions = () =>
+  request<Record<string, string>>('/api/v1/analyses/rule-versions')
+
 export async function downloadSarif(analysisId: string): Promise<void> {
   const token = getToken()
   const res = await fetch(`${API_BASE}/api/v1/analyses/${analysisId}/sarif`, {

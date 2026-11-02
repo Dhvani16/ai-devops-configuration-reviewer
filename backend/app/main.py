@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 
+import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -22,6 +23,7 @@ from app.core.logging import configure_logging
 from app.core.metrics import REQUEST_COUNT, REQUEST_DURATION
 from app.middleware.security import SecurityHeadersMiddleware
 from app.services.scheduler import start_scheduler, stop_scheduler
+from app.services.stale_reanalysis import reanalyze_stale_configurations
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,10 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     start_scheduler(settings)
+    asyncio.create_task(
+        reanalyze_stale_configurations(settings),
+        name="startup-stale-reanalysis",
+    )
     try:
         yield
     finally:

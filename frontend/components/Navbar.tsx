@@ -24,6 +24,7 @@ export default function Navbar() {
             <>
               <Link href="/dashboard" className="nav-link">Dashboard</Link>
               <Link href="/new" className="nav-link">New Analysis</Link>
+              <Link href="/bulk" className="nav-link">Bulk Upload</Link>
               <Link href="/history" className="nav-link">History</Link>
               <button onClick={handleSignOut} className="nav-link nav-btn">
                 Sign out

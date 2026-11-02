@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { use } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ApiError, analyzeConfiguration, downloadSarif, explainScore, getAnalysis, getChatHistory, getConfiguration, getConfigurationTrend, sendChatMessage } from '@/lib/api'
+import { ApiError, analyzeConfiguration, downloadSarif, explainScore, getAnalysis, getChatHistory, getConfiguration, getConfigurationTrend, sendChatMessage, shareAnalysis, unshareAnalysis } from '@/lib/api'
 import { useAuth } from '@/components/AuthProvider'
 import SeverityBadge from '@/components/SeverityBadge'
 import type { AnalysisResponse, ChatMessage, ConfigurationResponse, FindingCategory, FindingResponse, FindingSeverity, TrendPoint } from '@/lib/types'
@@ -389,6 +389,8 @@ export default function AnalysisResultsPage({ params }: { params: Promise<{ id: 
   const [trend, setTrend] = useState<TrendPoint[] | null>(null)
   const [trendOpen, setTrendOpen] = useState(false)
   const [trendLoading, setTrendLoading] = useState(false)
+  const [shareLoading, setShareLoading] = useState(false)
+  const [shareCopied, setShareCopied] = useState(false)
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login')
@@ -457,6 +459,34 @@ export default function AnalysisResultsPage({ params }: { params: Promise<{ id: 
       setTrend([])
     } finally {
       setTrendLoading(false)
+    }
+  }
+
+  async function handleShare() {
+    setShareLoading(true)
+    try {
+      const updated = await shareAnalysis(id)
+      setAnalysis(updated)
+      const url = `${window.location.origin}/share/${updated.share_token}`
+      await navigator.clipboard.writeText(url)
+      setShareCopied(true)
+      setTimeout(() => setShareCopied(false), 3000)
+    } catch {
+      // ignore
+    } finally {
+      setShareLoading(false)
+    }
+  }
+
+  async function handleUnshare() {
+    setShareLoading(true)
+    try {
+      await unshareAnalysis(id)
+      setAnalysis((prev) => prev ? { ...prev, share_token: null } : prev)
+    } catch {
+      // ignore
+    } finally {
+      setShareLoading(false)
     }
   }
 
@@ -603,6 +633,32 @@ export default function AnalysisResultsPage({ params }: { params: Promise<{ id: 
           >
             {sarifDownloading ? '…' : '↓ SARIF'}
           </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={analysis?.share_token ? handleUnshare : handleShare}
+            disabled={shareLoading || isPending}
+            title={analysis?.share_token ? 'Revoke public link' : 'Create public share link'}
+          >
+            {shareLoading ? '…' : analysis?.share_token ? '🔒 Unshare' : '🔗 Share'}
+          </button>
+          {shareCopied && (
+            <span style={{ fontSize: '0.75rem', color: '#4ade80', alignSelf: 'center' }}>
+              Link copied!
+            </span>
+          )}
+          {analysis?.share_token && !shareCopied && (
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={async () => {
+                await navigator.clipboard.writeText(`${window.location.origin}/share/${analysis.share_token}`)
+                setShareCopied(true)
+                setTimeout(() => setShareCopied(false), 3000)
+              }}
+              title="Copy share link"
+            >
+              Copy link
+            </button>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
             <button
               className="btn btn-secondary btn-sm"

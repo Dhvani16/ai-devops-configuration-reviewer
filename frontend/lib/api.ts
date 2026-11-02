@@ -80,6 +80,15 @@ export const getAnalysis = (id: string) =>
 export const explainScore = (id: string) =>
   request<{ explanation: string }>(`/api/v1/analyses/${id}/explain-score`)
 
+export const shareAnalysis = (id: string) =>
+  request<AnalysisResponse>(`/api/v1/analyses/${id}/share`, { method: 'POST' })
+
+export const unshareAnalysis = (id: string) =>
+  request<void>(`/api/v1/analyses/${id}/share`, { method: 'DELETE' })
+
+export const getSharedAnalysis = (token: string) =>
+  request<AnalysisResponse>(`/api/v1/analyses/shared/${token}`)
+
 export const getRuleVersions = () =>
   request<Record<string, string>>('/api/v1/analyses/rule-versions')
 

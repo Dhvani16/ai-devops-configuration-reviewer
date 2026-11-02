@@ -64,6 +64,9 @@ class Analysis(Base):
     status: Mapped[str] = mapped_column(String(20), default="pending")
     overall_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     rule_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    share_token: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, unique=True, index=True
+    )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

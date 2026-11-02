@@ -68,6 +68,7 @@ export interface AnalysisResponse {
   status: string
   overall_score: number | null
   rule_version: string | null
+  share_token: string | null
   error_message: string | null
   created_at: string
   completed_at: string | null

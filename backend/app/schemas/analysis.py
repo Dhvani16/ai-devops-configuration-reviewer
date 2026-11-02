@@ -58,6 +58,7 @@ class AnalysisResponse(BaseModel):
     status: str
     overall_score: float | None
     rule_version: str | None
+    share_token: str | None
     error_message: str | None
     created_at: datetime
     completed_at: datetime | None

@@ -11,6 +11,7 @@ class ConfigurationType(str, Enum):
     GITHUB_ACTIONS = "github_actions"
     KUBERNETES = "kubernetes"
     TERRAFORM = "terraform"
+    HELM = "helm"
 
 
 class FindingCategory(str, Enum):

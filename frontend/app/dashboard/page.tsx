@@ -26,6 +26,7 @@ function configTypeLabel(t: string): string {
     github_actions: 'GitHub Actions',
     kubernetes: 'Kubernetes',
     terraform: 'Terraform',
+    helm: 'Helm Chart',
   }
   return labels[t] ?? t
 }

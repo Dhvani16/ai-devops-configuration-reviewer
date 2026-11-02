@@ -3,6 +3,7 @@
 from app.analyzers.compose import ComposeAnalyzer
 from app.analyzers.dockerfile import DockerfileAnalyzer
 from app.analyzers.github_actions import GitHubActionsAnalyzer
+from app.analyzers.helm import HelmAnalyzer
 from app.analyzers.interface import ConfigurationAnalyzer
 from app.analyzers.kubernetes import KubernetesAnalyzer
 from app.analyzers.terraform import TerraformAnalyzer
@@ -16,6 +17,7 @@ RULE_VERSIONS: dict[ConfigurationType, str] = {
     ConfigurationType.GITHUB_ACTIONS: "2026-11-02",
     ConfigurationType.KUBERNETES: "2026-11-02",
     ConfigurationType.TERRAFORM: "2026-11-02",
+    ConfigurationType.HELM: "2026-11-02",
 }
 
 
@@ -30,5 +32,6 @@ def get_analyzer(configuration_type: ConfigurationType) -> ConfigurationAnalyzer
         ConfigurationType.GITHUB_ACTIONS: GitHubActionsAnalyzer(),
         ConfigurationType.KUBERNETES: KubernetesAnalyzer(),
         ConfigurationType.TERRAFORM: TerraformAnalyzer(),
+        ConfigurationType.HELM: HelmAnalyzer(),
     }
     return analyzers[configuration_type]

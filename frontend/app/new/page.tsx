@@ -32,6 +32,11 @@ const CONFIG_TYPES: { value: ConfigurationType; label: string; placeholder: stri
     label: 'Terraform',
     placeholder: 'terraform {\n  required_providers {\n    aws = {\n      source  = "hashicorp/aws"\n      version = "~> 5.0"\n    }\n  }\n}\n\nresource "aws_instance" "web" {\n  ami           = "ami-0c55b159cbfafe1f0"\n  instance_type = "t3.micro"\n}\n',
   },
+  {
+    value: 'helm',
+    label: 'Helm Chart',
+    placeholder: '# values.yaml\nreplicaCount: 1\n\nimage:\n  repository: myregistry/myapp\n  pullPolicy: IfNotPresent\n  tag: "1.0.0"\n\nservice:\n  type: ClusterIP\n  port: 80\n\nresources:\n  limits:\n    cpu: 200m\n    memory: 256Mi\n\nsecurityContext:\n  runAsNonRoot: true\n  runAsUser: 1000\n\ndebug: false\n',
+  },
 ]
 
 export default function NewAnalysisPage() {

@@ -4,6 +4,7 @@ from app.analyzers import get_analyzer
 from app.analyzers.compose import ComposeAnalyzer
 from app.analyzers.dockerfile import DockerfileAnalyzer
 from app.analyzers.github_actions import GitHubActionsAnalyzer
+from app.analyzers.helm import HelmAnalyzer
 from app.analyzers.kubernetes import KubernetesAnalyzer
 from app.analyzers.terraform import TerraformAnalyzer
 from app.schemas.finding import ConfigurationType
@@ -17,6 +18,7 @@ from app.schemas.finding import ConfigurationType
         (ConfigurationType.GITHUB_ACTIONS, GitHubActionsAnalyzer),
         (ConfigurationType.KUBERNETES, KubernetesAnalyzer),
         (ConfigurationType.TERRAFORM, TerraformAnalyzer),
+        (ConfigurationType.HELM, HelmAnalyzer),
     ],
 )
 def test_factory_returns_supported_analyzer(

@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 import { use } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ApiError, analyzeConfiguration, downloadSarif, explainScore, getAnalysis, getChatHistory, getConfiguration, sendChatMessage } from '@/lib/api'
+import { ApiError, analyzeConfiguration, downloadSarif, explainScore, getAnalysis, getChatHistory, getConfiguration, getConfigurationTrend, sendChatMessage } from '@/lib/api'
 import { useAuth } from '@/components/AuthProvider'
 import SeverityBadge from '@/components/SeverityBadge'
-import type { AnalysisResponse, ChatMessage, ConfigurationResponse, FindingCategory, FindingResponse, FindingSeverity } from '@/lib/types'
+import type { AnalysisResponse, ChatMessage, ConfigurationResponse, FindingCategory, FindingResponse, FindingSeverity, TrendPoint } from '@/lib/types'
 
 const SEVERITY_ORDER: FindingSeverity[] = ['critical', 'high', 'medium', 'low']
 const CATEGORIES: { value: FindingCategory | 'all'; label: string }[] = [
@@ -43,6 +43,99 @@ function configTypeLabel(t: string): string {
     helm: 'Helm Chart',
   }
   return labels[t] ?? t
+}
+
+function ScoreTrendChart({ points }: { points: TrendPoint[] }) {
+  if (points.length < 2) {
+    return (
+      <p className="muted" style={{ fontSize: '0.875rem', margin: 0 }}>
+        Not enough data yet — run at least 2 analyses to see the trend.
+      </p>
+    )
+  }
+
+  const W = 480
+  const H = 100
+  const PAD = { top: 12, right: 16, bottom: 28, left: 32 }
+  const chartW = W - PAD.left - PAD.right
+  const chartH = H - PAD.top - PAD.bottom
+
+  const minScore = Math.max(0, Math.min(...points.map((p) => p.overall_score)) - 5)
+  const maxScore = Math.min(100, Math.max(...points.map((p) => p.overall_score)) + 5)
+
+  const xScale = (i: number) => PAD.left + (i / (points.length - 1)) * chartW
+  const yScale = (s: number) => PAD.top + chartH - ((s - minScore) / (maxScore - minScore)) * chartH
+
+  const pathD = points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i).toFixed(1)} ${yScale(p.overall_score).toFixed(1)}`)
+    .join(' ')
+
+  function dotColor(score: number): string {
+    if (score >= 80) return '#4ade80'
+    if (score >= 60) return '#facc15'
+    if (score >= 40) return '#fb923c'
+    return '#f87171'
+  }
+
+  function fmtDate(iso: string): string {
+    const d = new Date(iso)
+    return `${d.getDate()} ${d.toLocaleString('en', { month: 'short' })}`
+  }
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', minWidth: `${W / 2}px`, display: 'block' }}>
+        {/* Y-axis grid lines */}
+        {[0, 50, 100].map((v) => {
+          if (v < minScore || v > maxScore) return null
+          const y = yScale(v)
+          return (
+            <g key={v}>
+              <line x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke="#1f2937" strokeWidth={1} />
+              <text x={PAD.left - 4} y={y + 4} fill="#6b7280" fontSize={9} textAnchor="end">{v}</text>
+            </g>
+          )
+        })}
+        {/* Trend line */}
+        <path d={pathD} fill="none" stroke="#4f46e5" strokeWidth={2} strokeLinejoin="round" />
+        {/* Data points */}
+        {points.map((p, i) => (
+          <g key={p.analysis_id}>
+            <circle
+              cx={xScale(i)}
+              cy={yScale(p.overall_score)}
+              r={4}
+              fill={dotColor(p.overall_score)}
+              stroke="#0f172a"
+              strokeWidth={1.5}
+            >
+              <title>{`${fmtDate(p.created_at)}: score ${Math.round(p.overall_score)}, ${p.total} findings`}</title>
+            </circle>
+            <text
+              x={xScale(i)}
+              y={yScale(p.overall_score) - 7}
+              fill={dotColor(p.overall_score)}
+              fontSize={8}
+              textAnchor="middle"
+              fontWeight={600}
+            >
+              {Math.round(p.overall_score)}
+            </text>
+            {/* X-axis date label */}
+            <text
+              x={xScale(i)}
+              y={H - 4}
+              fill="#6b7280"
+              fontSize={8}
+              textAnchor="middle"
+            >
+              {fmtDate(p.created_at)}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  )
 }
 
 function FindingCard({ finding }: { finding: FindingResponse }) {
@@ -293,6 +386,9 @@ export default function AnalysisResultsPage({ params }: { params: Promise<{ id: 
   const [sarifDownloading, setSarifDownloading] = useState(false)
   const [scoreExplanation, setScoreExplanation] = useState('')
   const [scoreExplaining, setScoreExplaining] = useState(false)
+  const [trend, setTrend] = useState<TrendPoint[] | null>(null)
+  const [trendOpen, setTrendOpen] = useState(false)
+  const [trendLoading, setTrendLoading] = useState(false)
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login')
@@ -346,6 +442,21 @@ export default function AnalysisResultsPage({ params }: { params: Promise<{ id: 
       setScoreExplanation('Could not generate explanation.')
     } finally {
       setScoreExplaining(false)
+    }
+  }
+
+  async function handleToggleTrend() {
+    if (trendOpen) { setTrendOpen(false); return }
+    setTrendOpen(true)
+    if (trend !== null) return
+    setTrendLoading(true)
+    try {
+      const points = await getConfigurationTrend(analysis!.configuration_id)
+      setTrend(points)
+    } catch {
+      setTrend([])
+    } finally {
+      setTrendLoading(false)
     }
   }
 
@@ -600,7 +711,33 @@ export default function AnalysisResultsPage({ params }: { params: Promise<{ id: 
       )}
 
       <div style={{ marginTop: '2rem' }}>
-        <Link href="/new" className="btn btn-secondary btn-sm">Analyze another →</Link>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={handleToggleTrend}
+          disabled={trendLoading}
+          style={{ marginBottom: '0.75rem' }}
+        >
+          {trendLoading ? '…' : trendOpen ? '▲ Hide trend' : '↗ Score trend'}
+        </button>
+        {trendOpen && (
+          <div className="card" style={{ padding: '1rem' }}>
+            <p style={{ margin: '0 0 0.75rem', fontWeight: 600, color: '#f9fafb', fontSize: '0.9375rem' }}>
+              Score over time — {config?.name}
+            </p>
+            {trendLoading ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span className="spinner" style={{ width: '0.875rem', height: '0.875rem' }} />
+                <span className="muted" style={{ fontSize: '0.875rem' }}>Loading…</span>
+              </div>
+            ) : (
+              <ScoreTrendChart points={trend ?? []} />
+            )}
+          </div>
+        )}
+        <div style={{ marginTop: '0.75rem' }}>
+          <Link href="/new" className="btn btn-secondary btn-sm">Analyze another →</Link>
+        </div>
       </div>
     </main>
   )

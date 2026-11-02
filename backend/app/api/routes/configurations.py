@@ -11,13 +11,14 @@ from app.api.deps import get_ai_provider_dep, get_current_user
 from app.core.config import Settings, get_settings
 from app.db.session import get_db_session
 from app.models.user import User
-from app.schemas.analysis import AnalysisResponse
+from app.schemas.analysis import AnalysisResponse, TrendPoint
 from app.schemas.configuration import (
     ConfigurationCreate,
     ConfigurationDetailResponse,
     ConfigurationResponse,
 )
 from app.services.analysis_pipeline import complete_analysis_async, create_pending_analysis
+from app.services.analyses import get_trend
 from app.services.configurations import (
     create_configuration,
     delete_configuration,
@@ -55,6 +56,15 @@ async def get_one(
     if config is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Configuration not found")
     return config  # type: ignore[return-value]
+
+
+@router.get("/{configuration_id}/trend", response_model=list[TrendPoint])
+async def get_score_trend(
+    configuration_id: UUID,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> list[TrendPoint]:
+    return await get_trend(session, configuration_id, current_user.id)
 
 
 @router.delete("/{configuration_id}", status_code=status.HTTP_204_NO_CONTENT)

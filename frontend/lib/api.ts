@@ -4,6 +4,7 @@ import type {
   ConfigurationCreate,
   ConfigurationResponse,
   TokenResponse,
+  TrendPoint,
   UserResponse,
 } from './types'
 
@@ -60,6 +61,9 @@ export const listConfigurations = () =>
 
 export const getConfiguration = (id: string) =>
   request<ConfigurationResponse>(`/api/v1/configurations/${id}`)
+
+export const getConfigurationTrend = (id: string) =>
+  request<TrendPoint[]>(`/api/v1/configurations/${id}/trend`)
 
 export const deleteConfiguration = (id: string) =>
   request<void>(`/api/v1/configurations/${id}`, { method: 'DELETE' })

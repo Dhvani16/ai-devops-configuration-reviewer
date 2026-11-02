@@ -11,6 +11,17 @@ export interface ChatMessage {
   created_at: string
 }
 
+export interface TrendPoint {
+  analysis_id: string
+  created_at: string
+  overall_score: number
+  total: number
+  critical: number
+  high: number
+  medium: number
+  low: number
+}
+
 export interface UserResponse {
   id: string
   email: string

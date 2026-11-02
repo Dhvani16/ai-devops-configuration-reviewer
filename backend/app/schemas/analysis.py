@@ -39,6 +39,19 @@ class FindingResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TrendPoint(BaseModel):
+    analysis_id: UUID
+    created_at: datetime
+    overall_score: float
+    total: int
+    critical: int
+    high: int
+    medium: int
+    low: int
+
+    model_config = {"from_attributes": False}
+
+
 class AnalysisResponse(BaseModel):
     id: UUID
     configuration_id: UUID
